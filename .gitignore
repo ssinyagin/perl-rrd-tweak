@@ -15,3 +15,5 @@ MANIFEST.SKIP.bak
 META.yml
 MYMETA.yml
 RRD-Tweak-*
+lib/RRD/Tweak.c
+lib/RRD/Tweak.o

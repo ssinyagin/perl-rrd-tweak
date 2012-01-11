@@ -9,7 +9,12 @@ my $builder = Module::Build->new(
     dist_version_from   => 'lib/RRD/Tweak.pm',
     build_requires => {
         'Test::More' => 0,
+        'ExtUtils::CBuilder' => 0,
     },
+    requires => {
+        'RRDs' => 0,
+    },
+    extra_linker_flags   => ['-lrrd'],
     add_to_cleanup      => [ 'RRD-Tweak-*' ],
     create_makefile_pl => 'traditional',
 );

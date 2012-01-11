@@ -2,93 +2,124 @@ package RRD::Tweak;
 
 use warnings;
 use strict;
+use Carp;
+
+
+use base 'DynaLoader';
+
+our $VERSION = '0.01';
+bootstrap RRD::Tweak;
 
 =head1 NAME
 
-RRD::Tweak - The great new RRD::Tweak!
-
-=head1 VERSION
-
-Version 0.01
+RRD::Tweak - RRD file manipulation
 
 =cut
 
-our $VERSION = '0.01';
 
 
 =head1 SYNOPSIS
 
-Quick summary of what the module does.
-
-Perhaps a little code snippet.
-
     use RRD::Tweak;
-
     my $foo = RRD::Tweak->new();
     ...
 
-=head1 EXPORT
 
-A list of functions that can be exported.  You can delete this section
-if you don't export anything, such as for a purely object-oriented module.
+=head1 METHODS
 
-=head1 SUBROUTINES/METHODS
+=head2 new
 
-=head2 function1
+ my $rrd = RRD::Tweak->new();
 
-=cut
-
-sub function1 {
-}
-
-=head2 function2
+Creates a new RRD::Tweak object
 
 =cut
 
-sub function2 {
+sub new {
+    my $class = shift;    
+    my $self = {};
+    bless $self, $class;
+    return $self;
 }
 
+
+
+=head2 create
+
+ $rrd->create({step => 300,
+               start => 1326288235,
+               ds => {InOctets =>  {type=> 'COUNTER',
+                                    heartbeat => 600},
+                      OutOctets => {type => 'COUNTER',
+                                    heartbeat => 600},
+                      Load =>      {type => 'GAUGE',
+                                    heartbeat => 800,
+                                    min => 0,
+                                    max => 255}},
+               rra => [{cf => 'AVERAGE',
+                        xff => 0.5,
+                        steps => 1,
+                        rows => 2016},
+                       {cf => 'AVERAGE',
+                        xff => 0.25,
+                        steps => 12,
+                        rows => 768},
+                       {cf => 'MAX',
+                        xff => 0.25,
+                        steps => 12,
+                        rows => 768}]});
+
+The method will create a new RRD with the data-sources and RRAs
+specified by the arguments. The arguments are presented in a hash
+reference with the following keys and values: C<step>, defining the
+minumum RRA resolution (default is 300 seconds); C<start> in seconds
+from epoch (default is "time() - 10"); C<ds> pointing to a hash that
+defines the datasources; C<rra> pointing to an array with RRA
+definitions.
+
+Each datasource definition is a hash entry with the DS name as key, and
+a hash with arguments as a value. The following arguments are supported:
+C<type>, C<heartbeat>, C<min> (default: "U"), C<max> (default: "U").
+
+Each RRA definition is a hash with the following arguments: C<cf>,
+C<xff>, C<steps>, C<rows>.
+
+See also I<rrdcreate> manual page of RRDTool for more details.
+
+=cut
+
+
+sub create {
+    my $self = shift;
+    my $args = shift;
+    
+    ref($args) or croak('create() requies a hashref as argument');
+    ref($args->{ds}) or croak('create() requires "ds" in the argument');
+    ref($args->{rra}) or croak('create() requires "rra" in the argument');
+    
+    my $pdp_step = $args->{step};
+    $pdp_step = 300 unless defined($pdp_step);
+
+    my $last_up = $args->{start};
+    $last_up = (time() - 10) unless defined($last_up);
+
+    foreach my $ds_name (sort keys %{$args->{ds}} ) {
+        my $r = $args->{ds}{$ds_name};
+        
+        defined($r->{type}) or croak('DS ' . $ds_name . ' is missing "type"');
+        defined($r->{heartbeat}) or
+            croak('DS ' . $ds_name . ' is missing "heartbeat"');
+    }
+
+    return;
+}
+
+
+        
+    
 =head1 AUTHOR
 
 Stanislav Sinyagin, C<< <ssinyagin at k-open.com> >>
-
-=head1 BUGS
-
-Please report any bugs or feature requests to C<bug-rrd-tweak at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=RRD-Tweak>.  I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
-
-
-
-
-=head1 SUPPORT
-
-You can find documentation for this module with the perldoc command.
-
-    perldoc RRD::Tweak
-
-
-You can also look for information at:
-
-=over 4
-
-=item * RT: CPAN's request tracker
-
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=RRD-Tweak>
-
-=item * AnnoCPAN: Annotated CPAN documentation
-
-L<http://annocpan.org/dist/RRD-Tweak>
-
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/RRD-Tweak>
-
-=item * Search CPAN
-
-L<http://search.cpan.org/dist/RRD-Tweak/>
-
-=back
 
 
 =head1 ACKNOWLEDGEMENTS
@@ -115,4 +146,14 @@ if not, write to the Free Software Foundation, Inc.,
 
 =cut
 
-1; # End of RRD::Tweak
+1;
+
+# Local Variables:
+# mode: cperl
+# indent-tabs-mode: nil
+# cperl-indent-level: 4
+# cperl-continued-statement-offset: 4
+# cperl-continued-brace-offset: -4
+# cperl-brace-offset: 0
+# cperl-label-offset: -2
+# End:
