@@ -18,8 +18,12 @@ my $filename = tmpnam();
 RRDs::create($filename, '--step', '300',
              'DS:x1:GAUGE:600:-273.0:5000',
              'DS:x2:GAUGE:600:0.0001:U',
-             'DS:x3:COMPUTE:x1,x2,*',
              'RRA:AVERAGE:0.5:1:1200',
+             'RRA:HWPREDICT:1440:0.1:0.0035:288:3',
+             'RRA:SEASONAL:288:0.1:2',
+             'RRA:DEVPREDICT:1440:5',
+             'RRA:DEVSEASONAL:288:0.1:2',
+             'RRA:FAILURES:288:7:9:5',
              'RRA:MIN:0.5:12:2400',
              'RRA:MAX:0.5:12:2400',
              'RRA:AVERAGE:0.5:12:2400');

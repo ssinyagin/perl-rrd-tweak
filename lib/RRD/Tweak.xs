@@ -1,3 +1,12 @@
+/* Emacs formatting hints */
+/*
+  Local Variables:
+  mode: c
+  indent-tabs-mode: nil
+  End:
+*/
+
+
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -20,13 +29,35 @@
 #endif
 
 
+/* this is not yet implemented in RRDtool -- with the hopes for a
+   better future */
+#if defined(RRD_TOOL_VERSION) && RRD_TOOL_VERSION > 10040999
+#define HAS_RRD_RPN_COMPACT2STR
+#else
+/* extract from rrd_format.c */
+#define converter(VV,VVV)                       \
+   if (strcmp(#VV, string) == 0) return VVV;
 
-/*
-  Local Variables:
-  mode: c
-  indent-tabs-mode: nil
-  End:
-*/
+static enum cf_en rrd_cf_conv(
+    const char *string)
+{
+    
+    converter(AVERAGE, CF_AVERAGE)
+        converter(MIN, CF_MINIMUM)
+        converter(MAX, CF_MAXIMUM)
+        converter(LAST, CF_LAST)
+        converter(HWPREDICT, CF_HWPREDICT)
+        converter(MHWPREDICT, CF_MHWPREDICT)
+        converter(DEVPREDICT, CF_DEVPREDICT)
+        converter(SEASONAL, CF_SEASONAL)
+        converter(DEVSEASONAL, CF_DEVSEASONAL)
+        converter(FAILURES, CF_FAILURES)
+        rrd_set_error("unknown consolidation function '%s'", string);
+    return (enum cf_en)(-1);
+}
+#endif
+
+
 
 
 MODULE = RRD::Tweak
@@ -35,12 +66,13 @@ MODULE = RRD::Tweak
 void
 load_file(HV *self, char *filename)
   INIT:
-    rrd_file_t *rrd_file;
-    rrd_t     rrd;
-    rrd_value_t value;
+    off_t        rra_base, rra_start, rra_next;
+    rrd_file_t   *rrd_file;
+    rrd_t        rrd;
+    rrd_value_t  value;
     unsigned int i, ii;
-    HV *ds_list;
-    HV *ds_params;
+    HV           *ds_list;
+    AV           *rra_list;
   CODE:
   {
       /* This function is derived from rrd_dump.c */
@@ -60,10 +92,12 @@ load_file(HV *self, char *filename)
       # Read the live header
       hv_store(self, "last_up", 7, newSVuv(rrd.live_head->last_up), 0);
 
+      /* process datasources */
       ds_list = newHV();
       for (i = 0; i < rrd.stat_head->ds_cnt; i++) {
-          
+          HV *ds_params;
           ds_params = newHV();
+          
           hv_store(ds_params, "type", 4, newSVpv(rrd.ds_def[i].dst, 20), 0);
 
           if( strcmp(rrd.ds_def[i].dst, "COMPUTE") != 0 ) {
@@ -79,16 +113,141 @@ load_file(HV *self, char *filename)
                        newSVnv(rrd.ds_def[i].par[DS_max_val].u_val), 0);
               
           } else {   /* COMPUTE */
+#ifdef HAS_RRD_RPN_COMPACT2STR
+              char     *str = NULL;
+              SV *sv = newSV(0);
+              
+              /* at the moment there's only non-public rpn_compact2str
+              in rrdtool */
+              rrd_rpn_compact2str((rpn_cdefds_t *)
+                                  &(rrd.ds_def[i].par[DS_cdef]),
+                                  rrd.ds_def, &str);
+              /* store a null-terminated string in SV */
+              sv_setpv(sv, str);
+              hv_store(ds_params, "rpn", 3, sv, 0);
+              free(str);
+#else
               croak("COMPUTE datasource parsing is not yet supported");
+#endif
           }
-          
+
+          /* last DS value is stored as string */
+          hv_store(ds_params, "last_ds", 7,
+                   newSVpv(rrd.pdp_prep[i].last_ds, 30), 0);
+
+          /* scratch value */
+          hv_store(ds_params, "scratch", 7,
+                   newSVnv(rrd.pdp_prep[i].scratch[PDP_val].u_val), 0);
+
+          /* unknown seconds */
+          hv_store(ds_params, "unknown_sec", 11,
+                   newSVuv(rrd.pdp_prep[i].scratch[PDP_unkn_sec_cnt].u_cnt), 0);
+
+          /* done with this DS -- store it into ds_list hash */
           hv_store(ds_list, rrd.ds_def[i].ds_nam, 20,
                    newRV((SV *) ds_params), 0);
       }
-
+                
+      /* done with datasiurces -- attach ds_list as $self->{ds} */
       hv_store(self, "ds", 2, newRV((SV *) ds_list), 0);
+
+      
+      /* process RRA's */
+      rra_list = newAV();
+      rra_base = rrd_file->header_len;
+      rra_next = rra_base;
+      for (i = 0; i < rrd.stat_head->rra_cnt; i++) {
+          long      timer = 0;
+          HV *rra_params;
+          
+          /* process RRA definition */
+          
+          rra_params = newHV();
+          rra_start = rra_next;
+          rra_next += (rrd.stat_head->ds_cnt
+                       * rrd.rra_def[i].row_cnt * sizeof(rrd_value_t));
+
+          hv_store(rra_params, "cf", 2,
+                   newSVpv(rrd.rra_def[i].cf_nam, 20), 0);
+          
+          hv_store(rra_params, "pdp_per_row", 11,
+                   newSVuv(rrd.rra_def[i].pdp_cnt), 0);
+          
+          /* RRA parameters */
+          switch (rrd_cf_conv(rrd.rra_def[i].cf_nam)) {
+              
+          case CF_HWPREDICT:
+          case CF_MHWPREDICT:
+              hv_store(rra_params, "hw_alpha", 8,
+                       newSVnv(rrd.rra_def[i].par[RRA_hw_alpha].u_val), 0);
+              hv_store(rra_params, "hw_beta", 7,
+                       newSVnv(rrd.rra_def[i].par[RRA_hw_beta].u_val), 0);
+              hv_store(rra_params, "dependent_rra_idx", 17,
+                       newSVuv(rrd.rra_def[i].par[
+                                   RRA_dependent_rra_idx].u_cnt), 0);
+            break;
+            
+          case CF_SEASONAL:
+          case CF_DEVSEASONAL:
+              hv_store(rra_params, "seasonal_gamma", 14,
+                       newSVnv(rrd.rra_def[i].par[RRA_seasonal_gamma].u_val),
+                       0);
+              hv_store(rra_params, "seasonal_smooth_idx", 19,
+                       newSVuv(rrd.rra_def[i].par[
+                                   RRA_seasonal_smooth_idx].u_cnt), 0);
+              if (atoi(rrd.stat_head->version) >= 4) {
+                  hv_store(rra_params, "smoothing_window", 16,
+                           newSVnv(rrd.rra_def[i].par[
+                                       RRA_seasonal_smoothing_window].u_val),0);
+              }
+
+              hv_store(rra_params, "dependent_rra_idx", 17,
+                       newSVuv(rrd.rra_def[i].par[
+                                   RRA_dependent_rra_idx].u_cnt), 0);
+            break;
+            
+          case CF_FAILURES:
+              hv_store(rra_params, "delta_pos", 9,
+                       newSVnv(rrd.rra_def[i].par[RRA_delta_pos].u_val), 0);
+              hv_store(rra_params, "delta_neg", 9,
+                       newSVnv(rrd.rra_def[i].par[RRA_delta_neg].u_val), 0);
+              hv_store(rra_params, "window_len", 10,
+                       newSVuv(rrd.rra_def[i].par[RRA_window_len].u_cnt), 0);
+              hv_store(rra_params, "failure_threshold", 17,
+                       newSVuv(rrd.rra_def[i].par[
+                                   RRA_failure_threshold].u_cnt), 0);
+              
+              /* fall thru */
+          case CF_DEVPREDICT:
+              hv_store(rra_params, "dependent_rra_idx", 17,
+                       newSVuv(rrd.rra_def[i].par[
+                                   RRA_dependent_rra_idx].u_cnt), 0);
+              break;
+              
+          case CF_AVERAGE:
+          case CF_MAXIMUM:
+          case CF_MINIMUM:
+          case CF_LAST:
+          default:
+              hv_store(rra_params, "xff", 3,
+                       newSVnv(rrd.rra_def[i].par[RRA_cdp_xff_val].u_val), 0);
+              break;
+          }
+
+          /* done with RRA definition, attach it to rra_list array */
+          av_push(rra_list, newRV((SV *) rra_params));
+
+          /* extract the RRA data */
+          
+      }
+      
+      /* done with RRA processing -- attach rra_list as $self->{rra} */
+      hv_store(self, "rra", 3, newRV((SV *) rra_list), 0);
+
+      
       rrd_free(&rrd);
   }
+
 
 
 
