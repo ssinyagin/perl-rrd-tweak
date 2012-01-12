@@ -66,13 +66,16 @@ MODULE = RRD::Tweak
 void
 load_file(HV *self, char *filename)
   INIT:
+    rrd_value_t  my_cdp;
     off_t        rra_base, rra_start, rra_next;
     rrd_file_t   *rrd_file;
     rrd_t        rrd;
     rrd_value_t  value;
-    unsigned int i, ii;
-    HV           *ds_list;
-    AV           *rra_list;
+unsigned int i, ii, ix, iii;
+    AV           *ds_list;
+    AV           *rradef_list;
+    AV           *cdp_data;
+    AV           *cdp_prep_list;
   CODE:
   {
       /* This function is derived from rrd_dump.c */
@@ -93,11 +96,12 @@ load_file(HV *self, char *filename)
       hv_store(self, "last_up", 7, newSVuv(rrd.live_head->last_up), 0);
 
       /* process datasources */
-      ds_list = newHV();
+      ds_list = newAV();
       for (i = 0; i < rrd.stat_head->ds_cnt; i++) {
           HV *ds_params;
           ds_params = newHV();
           
+          hv_store(ds_params, "name", 4, newSVpv(rrd.ds_def[i].ds_nam, 20), 0);
           hv_store(ds_params, "type", 4, newSVpv(rrd.ds_def[i].dst, 20), 0);
 
           if( strcmp(rrd.ds_def[i].dst, "COMPUTE") != 0 ) {
@@ -143,25 +147,26 @@ load_file(HV *self, char *filename)
           hv_store(ds_params, "unknown_sec", 11,
                    newSVuv(rrd.pdp_prep[i].scratch[PDP_unkn_sec_cnt].u_cnt), 0);
 
-          /* done with this DS -- store it into ds_list hash */
-          hv_store(ds_list, rrd.ds_def[i].ds_nam, 20,
-                   newRV((SV *) ds_params), 0);
+          /* done with this DS -- store it into ds_list array */
+          av_push(ds_list, newRV((SV *) ds_params));
       }
                 
-      /* done with datasiurces -- attach ds_list as $self->{ds} */
+      /* done with datasources -- attach ds_list as $self->{ds} */
       hv_store(self, "ds", 2, newRV((SV *) ds_list), 0);
 
       
       /* process RRA's */
-      rra_list = newAV();
+      rradef_list = newAV();
+      cdp_prep_list = newAV();
+      cdp_data = newAV();
+      
       rra_base = rrd_file->header_len;
       rra_next = rra_base;
       for (i = 0; i < rrd.stat_head->rra_cnt; i++) {
-          long      timer = 0;
           /* hash with RRA attributes */
           HV *rra_params = newHV();
           /* hash with CDP preparation values for each DS */
-          HV *rra_cdp_prep = newHV(); 
+          AV *rra_cdp_prep = newAV(); 
           
           /* process RRA definition */
           
@@ -330,28 +335,44 @@ load_file(HV *self, char *filename)
                   break;
               }
               
-              /* done with this DS CDP. store it into rra_cdp_prep hash */
-              hv_store(rra_cdp_prep, rrd.ds_def[ii].ds_nam, 20,
-                       newRV((SV *) ds_cdp_prep), 0);
+              /* done with this DS CDP. store it into rra_cdp_prep array */
+              av_push(rra_cdp_prep, newRV((SV *) ds_cdp_prep));
           }
 
-          /* done with all datasources. Store rra_cdp_prep into rra_params */
-          hv_store(rra_params, "cdp_prep", 8,
-                   newRV((SV *) rra_cdp_prep), 0);
+          /* done with all datasources. Store rra_cdp_prep into cdp_prep_list */
+          av_push(cdp_prep_list, newRV((SV *) rra_cdp_prep));
           
           
-          /* done with RRA definition, attach it to rra_list array */
-          av_push(rra_list, newRV((SV *) rra_params));
+          /* done with RRA definition, attach it to rradef_list array */
+          av_push(rradef_list, newRV((SV *) rra_params));
 
-          
-          
           /* extract the RRA data */
+          rrd_seek(rrd_file, (rra_start + (rrd.rra_ptr[i].cur_row + 1)
+                              * rrd.stat_head->ds_cnt
+                              * sizeof(rrd_value_t)), SEEK_SET);
+          ii = rrd.rra_ptr[i].cur_row;
+          for (ix = 0; ix < rrd.rra_def[i].row_cnt; ix++) {
+              ii++;
+              if (ii >= rrd.rra_def[i].row_cnt) {
+                  rrd_seek(rrd_file, rra_start, SEEK_SET);
+                  ii = 0; /* wrap if max row cnt is reached */
+              }
+              
+              for (iii = 0; iii < rrd.stat_head->ds_cnt; iii++) {
+                  rrd_read(rrd_file, &my_cdp, sizeof(rrd_value_t) * 1);
+                  
+                  /* my_cdp; */
+                      
+              }
+          }
           
       }
       
-      /* done with RRA processing -- attach rra_list as $self->{rra} */
-      hv_store(self, "rra", 3, newRV((SV *) rra_list), 0);
+      /* done with RRA processing -- attach rradef_list as $self->{rra} */
+      hv_store(self, "rra", 3, newRV((SV *) rradef_list), 0);
 
+      /* attach cdp_prep_list as $self->{cdp_prep} */
+      hv_store(self, "cdp_prep", 8, newRV((SV *) cdp_prep_list), 0);
       
       rrd_free(&rrd);
   }
