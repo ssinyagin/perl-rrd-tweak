@@ -158,11 +158,13 @@ load_file(HV *self, char *filename)
       rra_next = rra_base;
       for (i = 0; i < rrd.stat_head->rra_cnt; i++) {
           long      timer = 0;
-          HV *rra_params;
+          /* hash with RRA attributes */
+          HV *rra_params = newHV();
+          /* hash with CDP preparation values for each DS */
+          HV *rra_cdp_prep = newHV(); 
           
           /* process RRA definition */
           
-          rra_params = newHV();
           rra_start = rra_next;
           rra_next += (rrd.stat_head->ds_cnt
                        * rrd.rra_def[i].row_cnt * sizeof(rrd_value_t));
@@ -234,9 +236,115 @@ load_file(HV *self, char *filename)
               break;
           }
 
+          /* extract cdp_prep for each DS for this RRA */
+          for (ii = 0; ii < rrd.stat_head->ds_cnt; ii++) {
+              unsigned long ivalue;
+              HV *ds_cdp_prep = newHV();  /* per-DS CDP preparaion values */
+
+              switch (rrd_cf_conv(rrd.rra_def[i].cf_nam)) {
+                  
+              case CF_HWPREDICT:
+              case CF_MHWPREDICT:
+                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_hw_intercept].u_val;
+                  hv_store(ds_cdp_prep, "intercept", 9, newSVnv(value), 0);
+                  
+                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_hw_last_intercept].u_val;
+                  hv_store(ds_cdp_prep, "last_intercept", 14,
+                           newSVnv(value), 0);
+
+                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_hw_slope].u_val;
+                  hv_store(ds_cdp_prep, "slope", 5, newSVnv(value), 0);
+
+                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_hw_last_slope].u_val;
+                  hv_store(ds_cdp_prep, "last_slope", 10, newSVnv(value), 0);
+
+                  
+                  ivalue = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_null_count].u_cnt;
+                  hv_store(ds_cdp_prep, "nan_count", 9, newSVuv(ivalue), 0);
+
+                  ivalue = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_last_null_count].u_cnt;
+                  hv_store(ds_cdp_prep, "last_nan_count", 14,
+                           newSVuv(ivalue), 0);
+                  break;
+                  
+              case CF_SEASONAL:
+              case CF_DEVSEASONAL:
+                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_hw_seasonal].u_val;
+                  hv_store(ds_cdp_prep, "seasonal", 8, newSVnv(value), 0);
+
+                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_hw_last_seasonal].u_val;
+                  hv_store(ds_cdp_prep, "last_seasonal", 13, newSVnv(value), 0);
+                  
+                  ivalue = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_init_seasonal].u_cnt;
+                  hv_store(ds_cdp_prep, "init_flag", 10,
+                           newSVuv(ivalue), 0);
+                  break;
+                  
+              case CF_DEVPREDICT:
+                  break;
+                  
+              case CF_FAILURES:
+              {
+                  unsigned short vidx;
+                  char *violations_array =
+                      (char *)
+                      ((void *)
+                       rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].scratch);
+                  
+                  AV *history_array = newAV();
+                  
+                  for (vidx = 0;
+                       vidx < rrd.rra_def[i].par[RRA_window_len].u_cnt;
+                       ++vidx) {
+                      av_push(history_array, newSVuv(violations_array[vidx]));
+                  }
+
+                  hv_store(ds_cdp_prep, "history", 7,
+                           newRV((SV *) history_array), 0);
+              }
+
+              break;
+              
+              case CF_AVERAGE:
+              case CF_MAXIMUM:
+              case CF_MINIMUM:
+              case CF_LAST:
+              default:
+                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                      scratch[CDP_val].u_val;
+                  hv_store(ds_cdp_prep, "value", 5, newSVnv(value), 0);
+
+                  hv_store(ds_cdp_prep, "unknown_datapoints", 18,
+                           newSVuv(
+                               rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
+                               scratch[CDP_unkn_pdp_cnt].u_cnt), 0);
+                  break;
+              }
+              
+              /* done with this DS CDP. store it into rra_cdp_prep hash */
+              hv_store(rra_cdp_prep, rrd.ds_def[ii].ds_nam, 20,
+                       newRV((SV *) ds_cdp_prep), 0);
+          }
+
+          /* done with all datasources. Store rra_cdp_prep into rra_params */
+          hv_store(rra_params, "cdp_prep", 8,
+                   newRV((SV *) rra_cdp_prep), 0);
+          
+          
           /* done with RRA definition, attach it to rra_list array */
           av_push(rra_list, newRV((SV *) rra_params));
 
+          
+          
           /* extract the RRA data */
           
       }
