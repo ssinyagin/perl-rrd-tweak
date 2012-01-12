@@ -101,8 +101,8 @@ unsigned int i, ii, ix, iii;
           HV *ds_params;
           ds_params = newHV();
           
-          hv_store(ds_params, "name", 4, newSVpv(rrd.ds_def[i].ds_nam, 20), 0);
-          hv_store(ds_params, "type", 4, newSVpv(rrd.ds_def[i].dst, 20), 0);
+          hv_store(ds_params, "name", 4, newSVpv(rrd.ds_def[i].ds_nam, 0), 0);
+          hv_store(ds_params, "type", 4, newSVpv(rrd.ds_def[i].dst, 0), 0);
 
           if( strcmp(rrd.ds_def[i].dst, "COMPUTE") != 0 ) {
               
@@ -119,16 +119,12 @@ unsigned int i, ii, ix, iii;
           } else {   /* COMPUTE */
 #ifdef HAS_RRD_RPN_COMPACT2STR
               char     *str = NULL;
-              SV *sv = newSV(0);
-              
               /* at the moment there's only non-public rpn_compact2str
               in rrdtool */
               rrd_rpn_compact2str((rpn_cdefds_t *)
                                   &(rrd.ds_def[i].par[DS_cdef]),
                                   rrd.ds_def, &str);
-              /* store a null-terminated string in SV */
-              sv_setpv(sv, str);
-              hv_store(ds_params, "rpn", 3, sv, 0);
+              hv_store(ds_params, "rpn", 3, newSVpv(str,0), 0);
               free(str);
 #else
               croak("COMPUTE datasource parsing is not yet supported");
@@ -137,7 +133,7 @@ unsigned int i, ii, ix, iii;
 
           /* last DS value is stored as string */
           hv_store(ds_params, "last_ds", 7,
-                   newSVpv(rrd.pdp_prep[i].last_ds, 30), 0);
+                   newSVpv(rrd.pdp_prep[i].last_ds, 0), 0);
 
           /* scratch value */
           hv_store(ds_params, "scratch", 7,
@@ -165,8 +161,10 @@ unsigned int i, ii, ix, iii;
       for (i = 0; i < rrd.stat_head->rra_cnt; i++) {
           /* hash with RRA attributes */
           HV *rra_params = newHV();
-          /* hash with CDP preparation values for each DS */
-          AV *rra_cdp_prep = newAV(); 
+          /* array with CDP preparation values for each DS */
+          AV *rra_cdp_prep = newAV();
+          /* array of CDP rows */
+          AV *rra_cdp_rows = newAV(); 
           
           /* process RRA definition */
           
@@ -175,7 +173,7 @@ unsigned int i, ii, ix, iii;
                        * rrd.rra_def[i].row_cnt * sizeof(rrd_value_t));
 
           hv_store(rra_params, "cf", 2,
-                   newSVpv(rrd.rra_def[i].cf_nam, 20), 0);
+                   newSVpv(rrd.rra_def[i].cf_nam, 0), 0);
           
           hv_store(rra_params, "pdp_per_row", 11,
                    newSVuv(rrd.rra_def[i].pdp_cnt), 0);
@@ -353,6 +351,8 @@ unsigned int i, ii, ix, iii;
           ii = rrd.rra_ptr[i].cur_row;
           for (ix = 0; ix < rrd.rra_def[i].row_cnt; ix++) {
               ii++;
+              AV *cdp_row = newAV();
+              
               if (ii >= rrd.rra_def[i].row_cnt) {
                   rrd_seek(rrd_file, rra_start, SEEK_SET);
                   ii = 0; /* wrap if max row cnt is reached */
@@ -360,12 +360,14 @@ unsigned int i, ii, ix, iii;
               
               for (iii = 0; iii < rrd.stat_head->ds_cnt; iii++) {
                   rrd_read(rrd_file, &my_cdp, sizeof(rrd_value_t) * 1);
-                  
-                  /* my_cdp; */
-                      
+                  av_push(cdp_row, newSVnv(my_cdp));
               }
+              
+              av_push(rra_cdp_rows, newRV((SV *) cdp_row));
           }
-          
+
+          /* done with this RRA. Add it to cdp_data array */
+          av_push(cdp_data, newRV((SV *) rra_cdp_rows));
       }
       
       /* done with RRA processing -- attach rradef_list as $self->{rra} */
@@ -373,6 +375,9 @@ unsigned int i, ii, ix, iii;
 
       /* attach cdp_prep_list as $self->{cdp_prep} */
       hv_store(self, "cdp_prep", 8, newRV((SV *) cdp_prep_list), 0);
+
+      /* attach cdp_data as $self->{cdp_data} */
+      hv_store(self, "cdp_data", 8, newRV((SV *) cdp_data), 0);
       
       rrd_free(&rrd);
   }
