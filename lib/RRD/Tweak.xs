@@ -1,10 +1,3 @@
-/* Emacs formatting hints */
-/*
-  Local Variables:
-  mode: c
-  indent-tabs-mode: nil
-  End:
-*/
 
 
 #include "EXTERN.h"
@@ -28,6 +21,9 @@
 #define RRD_EXCL        (1<<5)
 #endif
 
+#ifndef RRD_VERSION4
+#define RRD_VERSION4   "0004"
+#endif
 
 /* this is not yet implemented in RRDtool -- with the hopes for a
    better future */
@@ -41,7 +37,7 @@
 static enum cf_en rrd_cf_conv(
     const char *string)
 {
-    
+
     converter(AVERAGE, CF_AVERAGE)
         converter(MIN, CF_MINIMUM)
         converter(MAX, CF_MAXIMUM)
@@ -57,21 +53,33 @@ static enum cf_en rrd_cf_conv(
 }
 #endif
 
-
+/* copied from rrd_restore.c -- to be independent from MMAP */
+static void local_rrd_free (rrd_t *rrd)
+{
+    free(rrd->live_head);
+    free(rrd->stat_head);
+    free(rrd->ds_def);
+    free(rrd->rra_def);
+    free(rrd->rra_ptr);
+    free(rrd->pdp_prep);
+    free(rrd->cdp_prep);
+    free(rrd->rrd_value);
+    free(rrd);
+}
 
 
 MODULE = RRD::Tweak
 
 
 void
-load_file(HV *self, char *filename)
+_load_file(HV *self, char *filename)
   INIT:
     rrd_value_t  my_cdp;
     off_t        rra_base, rra_start, rra_next;
     rrd_file_t   *rrd_file;
     rrd_t        rrd;
     rrd_value_t  value;
-unsigned int i, ii, ix, iii;
+    unsigned int i, ii, ix, iii;
     AV           *ds_list;
     AV           *rradef_list;
     AV           *cdp_data;
@@ -79,9 +87,9 @@ unsigned int i, ii, ix, iii;
   CODE:
   {
       /* This function is derived from rrd_dump.c */
-      
+
       rrd_init(&rrd);
-      
+
       rrd_file = rrd_open(filename, &rrd, RRD_READONLY | RRD_READAHEAD);
       if (rrd_file == NULL) {
           rrd_free(&rrd);
@@ -100,22 +108,22 @@ unsigned int i, ii, ix, iii;
       for (i = 0; i < rrd.stat_head->ds_cnt; i++) {
           HV *ds_params;
           ds_params = newHV();
-          
+
           hv_store(ds_params, "name", 4, newSVpv(rrd.ds_def[i].ds_nam, 0), 0);
           hv_store(ds_params, "type", 4, newSVpv(rrd.ds_def[i].dst, 0), 0);
 
           if( strcmp(rrd.ds_def[i].dst, "COMPUTE") != 0 ) {
-              
+
               /* heartbit */
               hv_store(ds_params, "hb", 2,
                        newSVuv(rrd.ds_def[i].par[DS_mrhb_cnt].u_cnt), 0);
-              
+
               /* min and max */
               hv_store(ds_params, "min", 3,
                        newSVnv(rrd.ds_def[i].par[DS_min_val].u_val), 0);
               hv_store(ds_params, "max", 3,
                        newSVnv(rrd.ds_def[i].par[DS_max_val].u_val), 0);
-              
+
           } else {   /* COMPUTE */
 #ifdef HAS_RRD_RPN_COMPACT2STR
               char     *str = NULL;
@@ -127,7 +135,8 @@ unsigned int i, ii, ix, iii;
               hv_store(ds_params, "rpn", 3, newSVpv(str,0), 0);
               free(str);
 #else
-              croak("COMPUTE datasource parsing is not yet supported");
+              rrd_free(&rrd);
+              croak("COMPUTE datasource is not supported by RRD::Tweak");
 #endif
           }
 
@@ -136,7 +145,7 @@ unsigned int i, ii, ix, iii;
                    newSVpv(rrd.pdp_prep[i].last_ds, 0), 0);
 
           /* scratch value */
-          hv_store(ds_params, "scratch", 7,
+          hv_store(ds_params, "scratch_value", 13,
                    newSVnv(rrd.pdp_prep[i].scratch[PDP_val].u_val), 0);
 
           /* unknown seconds */
@@ -146,16 +155,16 @@ unsigned int i, ii, ix, iii;
           /* done with this DS -- store it into ds_list array */
           av_push(ds_list, newRV((SV *) ds_params));
       }
-                
+
       /* done with datasources -- attach ds_list as $self->{ds} */
       hv_store(self, "ds", 2, newRV((SV *) ds_list), 0);
 
-      
+
       /* process RRA's */
       rradef_list = newAV();
       cdp_prep_list = newAV();
       cdp_data = newAV();
-      
+
       rra_base = rrd_file->header_len;
       rra_next = rra_base;
       for (i = 0; i < rrd.stat_head->rra_cnt; i++) {
@@ -164,23 +173,23 @@ unsigned int i, ii, ix, iii;
           /* array with CDP preparation values for each DS */
           AV *rra_cdp_prep = newAV();
           /* array of CDP rows */
-          AV *rra_cdp_rows = newAV(); 
-          
+          AV *rra_cdp_rows = newAV();
+
           /* process RRA definition */
-          
+
           rra_start = rra_next;
           rra_next += (rrd.stat_head->ds_cnt
                        * rrd.rra_def[i].row_cnt * sizeof(rrd_value_t));
 
           hv_store(rra_params, "cf", 2,
                    newSVpv(rrd.rra_def[i].cf_nam, 0), 0);
-          
+
           hv_store(rra_params, "pdp_per_row", 11,
                    newSVuv(rrd.rra_def[i].pdp_cnt), 0);
-          
-          /* RRA parameters */
+
+          /* RRA parameters specific to each CF */
           switch (rrd_cf_conv(rrd.rra_def[i].cf_nam)) {
-              
+
           case CF_HWPREDICT:
           case CF_MHWPREDICT:
               hv_store(rra_params, "hw_alpha", 8,
@@ -191,7 +200,7 @@ unsigned int i, ii, ix, iii;
                        newSVuv(rrd.rra_def[i].par[
                                    RRA_dependent_rra_idx].u_cnt), 0);
             break;
-            
+
           case CF_SEASONAL:
           case CF_DEVSEASONAL:
               hv_store(rra_params, "seasonal_gamma", 14,
@@ -210,7 +219,7 @@ unsigned int i, ii, ix, iii;
                        newSVuv(rrd.rra_def[i].par[
                                    RRA_dependent_rra_idx].u_cnt), 0);
             break;
-            
+
           case CF_FAILURES:
               hv_store(rra_params, "delta_pos", 9,
                        newSVnv(rrd.rra_def[i].par[RRA_delta_pos].u_val), 0);
@@ -221,14 +230,14 @@ unsigned int i, ii, ix, iii;
               hv_store(rra_params, "failure_threshold", 17,
                        newSVuv(rrd.rra_def[i].par[
                                    RRA_failure_threshold].u_cnt), 0);
-              
+
               /* fall thru */
           case CF_DEVPREDICT:
               hv_store(rra_params, "dependent_rra_idx", 17,
                        newSVuv(rrd.rra_def[i].par[
                                    RRA_dependent_rra_idx].u_cnt), 0);
               break;
-              
+
           case CF_AVERAGE:
           case CF_MAXIMUM:
           case CF_MINIMUM:
@@ -241,73 +250,65 @@ unsigned int i, ii, ix, iii;
 
           /* extract cdp_prep for each DS for this RRA */
           for (ii = 0; ii < rrd.stat_head->ds_cnt; ii++) {
-              unsigned long ivalue;
+              unsigned long uival;
+              cdp_prep_t *cur_cdp_prep =
+                  rrd.cdp_prep + (i * rrd.stat_head->ds_cnt + ii);
+
               HV *ds_cdp_prep = newHV();  /* per-DS CDP preparaion values */
 
               switch (rrd_cf_conv(rrd.rra_def[i].cf_nam)) {
-                  
+
               case CF_HWPREDICT:
               case CF_MHWPREDICT:
-                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_hw_intercept].u_val;
+                  value = cur_cdp_prep->scratch[CDP_hw_intercept].u_val;
                   hv_store(ds_cdp_prep, "intercept", 9, newSVnv(value), 0);
-                  
-                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_hw_last_intercept].u_val;
+
+                  value = cur_cdp_prep->scratch[CDP_hw_last_intercept].u_val;
                   hv_store(ds_cdp_prep, "last_intercept", 14,
                            newSVnv(value), 0);
 
-                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_hw_slope].u_val;
+                  value = cur_cdp_prep->scratch[CDP_hw_slope].u_val;
                   hv_store(ds_cdp_prep, "slope", 5, newSVnv(value), 0);
 
-                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_hw_last_slope].u_val;
+                  value = cur_cdp_prep->scratch[CDP_hw_last_slope].u_val;
                   hv_store(ds_cdp_prep, "last_slope", 10, newSVnv(value), 0);
 
-                  
-                  ivalue = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_null_count].u_cnt;
-                  hv_store(ds_cdp_prep, "nan_count", 9, newSVuv(ivalue), 0);
 
-                  ivalue = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_last_null_count].u_cnt;
+                  uival = cur_cdp_prep->scratch[CDP_null_count].u_cnt;
+                  hv_store(ds_cdp_prep, "nan_count", 9, newSVuv(uival), 0);
+
+                  uival = cur_cdp_prep->scratch[CDP_last_null_count].u_cnt;
                   hv_store(ds_cdp_prep, "last_nan_count", 14,
-                           newSVuv(ivalue), 0);
+                           newSVuv(uival), 0);
                   break;
-                  
+
               case CF_SEASONAL:
               case CF_DEVSEASONAL:
-                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_hw_seasonal].u_val;
+                  value = cur_cdp_prep->scratch[CDP_hw_seasonal].u_val;
                   hv_store(ds_cdp_prep, "seasonal", 8, newSVnv(value), 0);
 
-                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_hw_last_seasonal].u_val;
+                  value = cur_cdp_prep->scratch[CDP_hw_last_seasonal].u_val;
                   hv_store(ds_cdp_prep, "last_seasonal", 13, newSVnv(value), 0);
-                  
-                  ivalue = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_init_seasonal].u_cnt;
+
+                  uival = cur_cdp_prep->scratch[CDP_init_seasonal].u_cnt;
                   hv_store(ds_cdp_prep, "init_flag", 10,
-                           newSVuv(ivalue), 0);
+                           newSVuv(uival), 0);
                   break;
-                  
+
               case CF_DEVPREDICT:
                   break;
-                  
+
               case CF_FAILURES:
               {
                   unsigned short vidx;
                   char *violations_array =
-                      (char *)
-                      ((void *)
-                       rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].scratch);
-                  
+                      (char *) ((void *) cur_cdp_prep->scratch);
+
                   AV *history_array = newAV();
-                  
+
                   for (vidx = 0;
                        vidx < rrd.rra_def[i].par[RRA_window_len].u_cnt;
-                       ++vidx) {
+                       vidx++) {
                       av_push(history_array, newSVuv(violations_array[vidx]));
                   }
 
@@ -316,31 +317,30 @@ unsigned int i, ii, ix, iii;
               }
 
               break;
-              
+
               case CF_AVERAGE:
               case CF_MAXIMUM:
               case CF_MINIMUM:
               case CF_LAST:
               default:
-                  value = rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                      scratch[CDP_val].u_val;
+                  value = cur_cdp_prep->scratch[CDP_val].u_val;
                   hv_store(ds_cdp_prep, "value", 5, newSVnv(value), 0);
 
                   hv_store(ds_cdp_prep, "unknown_datapoints", 18,
                            newSVuv(
-                               rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].
-                               scratch[CDP_unkn_pdp_cnt].u_cnt), 0);
+                               cur_cdp_prep->scratch[CDP_unkn_pdp_cnt].u_cnt),
+                           0);
                   break;
               }
-              
+
               /* done with this DS CDP. store it into rra_cdp_prep array */
               av_push(rra_cdp_prep, newRV((SV *) ds_cdp_prep));
           }
 
           /* done with all datasources. Store rra_cdp_prep into cdp_prep_list */
           av_push(cdp_prep_list, newRV((SV *) rra_cdp_prep));
-          
-          
+
+
           /* done with RRA definition, attach it to rradef_list array */
           av_push(rradef_list, newRV((SV *) rra_params));
 
@@ -352,24 +352,24 @@ unsigned int i, ii, ix, iii;
           for (ix = 0; ix < rrd.rra_def[i].row_cnt; ix++) {
               ii++;
               AV *cdp_row = newAV();
-              
+
               if (ii >= rrd.rra_def[i].row_cnt) {
                   rrd_seek(rrd_file, rra_start, SEEK_SET);
                   ii = 0; /* wrap if max row cnt is reached */
               }
-              
+
               for (iii = 0; iii < rrd.stat_head->ds_cnt; iii++) {
                   rrd_read(rrd_file, &my_cdp, sizeof(rrd_value_t) * 1);
                   av_push(cdp_row, newSVnv(my_cdp));
               }
-              
+
               av_push(rra_cdp_rows, newRV((SV *) cdp_row));
           }
 
           /* done with this RRA. Add it to cdp_data array */
           av_push(cdp_data, newRV((SV *) rra_cdp_rows));
       }
-      
+
       /* done with RRA processing -- attach rradef_list as $self->{rra} */
       hv_store(self, "rra", 3, newRV((SV *) rradef_list), 0);
 
@@ -378,7 +378,7 @@ unsigned int i, ii, ix, iii;
 
       /* attach cdp_data as $self->{cdp_data} */
       hv_store(self, "cdp_data", 8, newRV((SV *) cdp_data), 0);
-      
+
       rrd_free(&rrd);
   }
 
@@ -387,4 +387,429 @@ unsigned int i, ii, ix, iii;
 
 
 
+void
+_save_file(HV *self, char *filename)
+  INIT:
+    rrd_t        *rrd;
+    SV           **fetch_result;
+    STRLEN       len;
+    char         *ptr;
+    unsigned int i, ii, uival, rrd_file_version;
+    rrd_value_t  value;
+    unsigned int n_ds = 0; /* number of DS'es */
+    unsigned int n_rra = 0; /* number of RRA's */
+  CODE:
+  {
+      /* This function is derived from rrd_restore.c
+         We do not validate $self here and assume that $self->validate()
+         was called before. */
+
+      rrd = (rrd_t *) malloc(sizeof(rrd_t));
+      if (rrd == NULL) {
+          croak("save_file: malloc failed.");
+      }
+      memset(rrd, '\0', sizeof(rrd_t));
+
+      rrd->stat_head = (stat_head_t *) malloc(sizeof(stat_head_t));
+      if (rrd->stat_head == NULL) {
+          free(rrd);
+          croak("save_file: malloc failed.");
+      }
+      memset(rrd->stat_head, '\0', sizeof(stat_head_t));
+
+      strncpy(rrd->stat_head->cookie, "RRD", sizeof(rrd->stat_head->cookie));
+      rrd->stat_head->float_cookie = FLOAT_COOKIE;
+
+      rrd->live_head = (live_head_t *) malloc(sizeof(live_head_t));
+      if (rrd->live_head == NULL) {
+          free(rrd->stat_head);
+          free(rrd);
+          croak("save_file: malloc failed.");
+      }
+      memset(rrd->live_head, '\0', sizeof(live_head_t));
+
+      /* store the version. If $self->{version} is not 4, use 3 */
+      fetch_result = hv_fetch(self, "version", 7, 0);
+      ptr = NULL;
+      uival = SvUV(*fetch_result);
+      if( uival == 4 ) {
+          rrd_file_version = 4;
+          ptr = RRD_VERSION4;
+      }
+      if( ptr == NULL ) {
+          rrd_file_version = 3;
+          ptr = RRD_VERSION3;
+      }
+      strncpy(rrd->stat_head->version, ptr, sizeof(rrd->stat_head->version));
+
+      /* last update */
+      fetch_result = hv_fetch(self, "last_up", 7, 0);
+      uival = SvUV(*fetch_result);
+      rrd->live_head->last_up = uival;
+
+      /* ds */
+      {
+          AV *ds_array;
+
+          fetch_result = hv_fetch(self, "ds", 2, 0);
+          ds_array = (AV *)SvRV(*fetch_result);
+          n_ds = av_len(ds_array) + 1;
+
+          /* Allocate space for DS definitions */
+          rrd->ds_def = (ds_def_t *) malloc(sizeof(ds_def_t) * n_ds);
+          if( rrd->ds_def == NULL ) {
+              local_rrd_free(rrd);
+              croak("save_file: malloc failed.");
+          }
+          memset(rrd->ds_def, '\0', sizeof(ds_def_t)  * n_ds);
+
+          /* Allocate pdp_prep space for DS definitions */
+          rrd->pdp_prep = (pdp_prep_t *) malloc(sizeof(pdp_prep_t) * n_ds);
+          if( rrd->pdp_prep == NULL ) {
+              local_rrd_free(rrd);
+              croak("save_file: malloc failed.");
+          }
+          memset(rrd->pdp_prep, '\0', sizeof(pdp_prep_t)  * n_ds);
+
+          rrd->stat_head->ds_cnt = n_ds;
+
+          for(i = 0; i < n_ds; i++) {
+              HV *ds_params;
+              ds_def_t *cur_ds_def = rrd->ds_def + i;
+              pdp_prep_t *cur_pdp_prep = rrd->pdp_prep + i;
+
+              fetch_result = av_fetch(ds_array, i, 0);
+              ds_params = (HV *)SvRV(*fetch_result);
+
+              /* DS name */
+              fetch_result = hv_fetch(ds_params, "name", 4, 0);
+              ptr = SvPV_nolen(*fetch_result);
+              strncpy(cur_ds_def->ds_nam, ptr, sizeof(cur_ds_def->ds_nam));
+
+              /* DS type */
+              fetch_result = hv_fetch(ds_params, "type", 4, 0);
+              ptr = SvPV_nolen(*fetch_result);
+              strncpy(cur_ds_def->dst, ptr, sizeof(cur_ds_def->dst));
+
+              if( strcmp(ptr, "COMPUTE") != 0 ) {
+
+                  /* DS heartbit */
+                  fetch_result = hv_fetch(ds_params, "hb", 2, 0);
+                  uival = SvUV(*fetch_result);
+                  cur_ds_def->par[DS_mrhb_cnt].u_cnt = uival;
+
+                  /* DS min */
+                  fetch_result = hv_fetch(ds_params, "min", 3, 0);
+                  value = SvNV(*fetch_result);
+                  cur_ds_def->par[DS_min_val].u_val = value;
+
+                  /* DS max */
+                  fetch_result = hv_fetch(ds_params, "max", 3, 0);
+                  value = SvNV(*fetch_result);
+                  cur_ds_def->par[DS_max_val].u_val = value;
+              }
+              else {   /* COMPUTE */
+                  /* parseCDEF_DS() is not avaiable in librrd
+                     public interface */
+                  local_rrd_free(rrd);
+                  croak("COMPUTE datasource is not supported by RRD::Tweak");
+              }
+
+              /* pdp_prep last_ds */
+              fetch_result = hv_fetch(ds_params, "last_ds", 7, 0);
+              ptr = SvPV_nolen(*fetch_result);
+              strncpy(cur_pdp_prep->last_ds, ptr,
+                      sizeof(cur_pdp_prep->last_ds));
+
+              /* pdp_prep scratch_value */
+              fetch_result = hv_fetch(ds_params, "scratch_value", 13, 0);
+              value = SvNV(*fetch_result);
+              cur_pdp_prep->scratch[PDP_val].u_val = value;
+
+              /* pdp_prep unknown_sec */
+              fetch_result = hv_fetch(ds_params, "unknown_sec", 11, 0);
+              uival = SvUV(*fetch_result);
+              cur_pdp_prep->scratch[PDP_unkn_sec_cnt].u_cnt = uival;
+          }
+          /* finished processinb DS definitions */
+      }
+
+      /* rra */
+      {
+          AV *rra_array;
+          AV *cdp_prep_array;
+
+          fetch_result = hv_fetch(self, "rra", 3, 0);
+          rra_array = (AV *)SvRV(*fetch_result);
+          n_rra = av_len(rra_array) + 1;
+
+          fetch_result = hv_fetch(self, "cdp_prep", 8, 0);
+          cdp_prep_array = (AV *)SvRV(*fetch_result);
+
+          /* Allocate rra_def space for all RRA's */
+          rrd->rra_def =
+              (rra_def_t *) malloc(sizeof(rra_def_t) * n_rra);
+          if( rrd->rra_def == NULL ) {
+              local_rrd_free(rrd);
+              croak("save_file: malloc failed.");
+          }
+          memset(rrd->rra_def, '\0', sizeof(rra_def_t) * n_rra);
+
+          /* Allocate cdp_prep_t */
+          rrd->cdp_prep =
+              (cdp_prep_t *) malloc(sizeof(cdp_prep_t) * n_ds * n_rra);
+          if( rrd->cdp_prep  == NULL ) {
+              local_rrd_free(rrd);
+              croak("save_file: malloc failed.");
+          }
+          memset(rrd->cdp_prep, '\0', sizeof(cdp_prep_t) * n_ds * n_rra);
+
+          /* Allocate rra_ptr_t */
+          rrd->rra_ptr =
+              (rra_ptr_t *) malloc(sizeof(rra_ptr_t) * n_rra);
+          if( rrd->rra_ptr == NULL ) {
+              local_rrd_free(rrd);
+              croak("save_file: malloc failed.");
+          }
+          memset(rrd->rra_ptr, '\0', sizeof(rra_ptr_t) * n_rra);
+
+          rrd->stat_head->rra_cnt = n_rra;
+
+          for(i = 0; i < n_rra; i++)  {
+              const char *cf;
+              unsigned int cf_num;
+              HV *rra_params;
+              AV *rra_cdp_prep_array;
+
+              rra_def_t *cur_rra_def = rrd->rra_def + i;
+              rra_ptr_t *cur_rra_ptr;
+
+              /* get rra_params hash from rra_array->[i] */
+              fetch_result = av_fetch(rra_array, i, 0);
+              rra_params = (HV *)SvRV(*fetch_result);
+
+              /* get rra_cdp_prep_array from cdp_prep_array->[i] */
+              fetch_result = av_fetch(cdp_prep_array, i, 0);
+              rra_cdp_prep_array = (AV *)SvRV(*fetch_result);
+
+              /* RRA cf */
+              fetch_result = hv_fetch(rra_params, "cf", 2, 0);
+              cf = SvPV_nolen(*fetch_result);
+              strncpy(cur_rra_def->cf_nam, cf, sizeof(cur_rra_def->cf_nam));
+              cf_num = rrd_cf_conv(cf);
+
+              /* RRA pdp_per_row */
+              fetch_result = hv_fetch(rra_params, "pdp_per_row", 11, 0);
+              uival = SvUV(*fetch_result);
+              cur_rra_def->pdp_cnt = uival;
+
+              /* RRA parameters specific to each CF */
+              switch (cf_num) {
+
+              case CF_HWPREDICT:
+              case CF_MHWPREDICT:
+                  fetch_result = hv_fetch(rra_params, "hw_alpha", 8, 0);
+                  value = SvNV(*fetch_result);
+                  cur_rra_def->par[RRA_hw_alpha].u_val = value;
+
+                  fetch_result = hv_fetch(rra_params, "hw_beta", 7, 0);
+                  value = SvNV(*fetch_result);
+                  cur_rra_def->par[RRA_hw_beta].u_val = value;
+
+                  fetch_result =
+                      hv_fetch(rra_params, "dependent_rra_idx", 17, 0);
+                  uival = SvUV(*fetch_result);
+                  cur_rra_def->par[RRA_dependent_rra_idx].u_cnt = uival;
+
+                  break;
+
+              case CF_SEASONAL:
+              case CF_DEVSEASONAL:
+                  fetch_result = hv_fetch(rra_params, "seasonal_gamma", 14, 0);
+                  value = SvNV(*fetch_result);
+                  cur_rra_def->par[RRA_seasonal_gamma].u_val = value;
+
+                  fetch_result =
+                      hv_fetch(rra_params, "seasonal_smooth_idx", 19, 0);
+                  uival = SvUV(*fetch_result);
+                  cur_rra_def->par[RRA_seasonal_smooth_idx].u_cnt = uival;
+
+                  if (rrd_file_version >= 4) {
+                      fetch_result =
+                          hv_fetch(rra_params, "smoothing_window", 16, 0);
+                      value = SvNV(*fetch_result);
+                      cur_rra_def->par[RRA_seasonal_smoothing_window].u_val =
+                          value;
+                  }
+
+                  fetch_result =
+                      hv_fetch(rra_params, "dependent_rra_idx", 17, 0);
+                  uival = SvUV(*fetch_result);
+                  cur_rra_def->par[RRA_dependent_rra_idx].u_cnt = uival;
+
+                  break;
+
+              case CF_FAILURES:
+                  fetch_result = hv_fetch(rra_params, "delta_pos", 9, 0);
+                  value = SvNV(*fetch_result);
+                  cur_rra_def->par[RRA_delta_pos].u_val = value;
+
+                  fetch_result = hv_fetch(rra_params, "delta_neg", 9, 0);
+                  value = SvNV(*fetch_result);
+                  cur_rra_def->par[RRA_delta_neg].u_val = value;
+
+                  fetch_result = hv_fetch(rra_params, "window_len", 10, 0);
+                  uival = SvUV(*fetch_result);
+                  cur_rra_def->par[RRA_window_len].u_cnt = uival;
+
+                  fetch_result =
+                      hv_fetch(rra_params, "failure_threshold", 17, 0);
+                  uival = SvUV(*fetch_result);
+                  cur_rra_def->par[RRA_failure_threshold].u_cnt = uival;
+
+                  /* fall thru */
+
+              case CF_DEVPREDICT:
+                  fetch_result =
+                      hv_fetch(rra_params, "dependent_rra_idx", 17, 0);
+                  uival = SvUV(*fetch_result);
+                  cur_rra_def->par[RRA_dependent_rra_idx].u_cnt = uival;
+
+                  break;
+
+              case CF_AVERAGE:
+              case CF_MAXIMUM:
+              case CF_MINIMUM:
+              case CF_LAST:
+              default:
+                  fetch_result = hv_fetch(rra_params, "xff", 3, 0);
+                  value = SvNV(*fetch_result);
+                  cur_rra_def->par[RRA_cdp_xff_val].u_val = value;
+                  break;
+              }
+
+              /* retrieve cdp_prep for each DS for this RRA */
+
+              for (ii = 0; ii < n_ds; ii++) {
+                  cdp_prep_t *cur_cdp_prep = rrd->cdp_prep + (i * n_ds + ii);
+                  HV *ds_cdp_prep;
+
+                  /* get ds_cdp_prep hash from rra_cdp_prep_array->[ii] */
+                  fetch_result = av_fetch(cdp_prep_array, ii, 0);
+                  ds_cdp_prep = (HV *)SvRV(*fetch_result);
+
+                  /* cdp_prep parameters specific to each CF */
+                  switch (cf_num) {
+
+                  case CF_HWPREDICT:
+                  case CF_MHWPREDICT:
+                      fetch_result = hv_fetch(ds_cdp_prep, "intercept", 9, 0);
+                      value = SvNV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_hw_intercept].u_val = value;
+
+                      fetch_result =
+                          hv_fetch(ds_cdp_prep, "last_intercept", 14, 0);
+                      value = SvNV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_hw_last_intercept].u_val =
+                          value;
+
+                      fetch_result = hv_fetch(ds_cdp_prep, "slope", 5, 0);
+                      value = SvNV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_hw_slope].u_val = value;
+
+                      fetch_result =
+                          hv_fetch(ds_cdp_prep, "last_slope", 10, 0);
+                      value = SvNV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_hw_last_slope].u_val = value;
+
+                      fetch_result = hv_fetch(ds_cdp_prep, "nan_count", 9, 0);
+                      uival = SvUV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_null_count].u_cnt = uival;
+
+
+                      fetch_result =
+                          hv_fetch(ds_cdp_prep, "last_nan_count", 14, 0);
+                      uival = SvUV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_last_null_count].u_cnt = uival;
+
+                      break;
+
+                  case CF_SEASONAL:
+                  case CF_DEVSEASONAL:
+
+                      fetch_result = hv_fetch(ds_cdp_prep, "seasonal", 8, 0);
+                      value = SvNV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_hw_seasonal].u_val = value;
+
+                      fetch_result =
+                          hv_fetch(ds_cdp_prep, "last_seasonal", 13, 0);
+                      value = SvNV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_hw_last_seasonal].u_val = value;
+
+                      fetch_result = hv_fetch(ds_cdp_prep, "init_flag", 10, 0);
+                      uival = SvUV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_init_seasonal].u_cnt = uival;
+
+                      break;
+
+                  case CF_DEVPREDICT:
+                      break;
+
+                  case CF_FAILURES:
+                  {
+                      unsigned short vidx, history_len;
+                      char *violations_array =
+                          (char *)((void *) cur_cdp_prep->scratch);
+
+                      AV *history_array;
+                      fetch_result = hv_fetch(ds_cdp_prep, "history", 7, 0);
+                      history_array = (AV *)SvRV(*fetch_result);
+
+                      history_len = av_len(history_array) + 1;
+
+                      for (vidx = 0; vidx < history_len; vidx++) {
+                          fetch_result = av_fetch(history_array, vidx, 0);
+                          uival = SvUV(*fetch_result);
+                          violations_array[vidx] = (char) uival;
+                      }
+                  }
+
+                  break;
+
+                  case CF_AVERAGE:
+                  case CF_MAXIMUM:
+                  case CF_MINIMUM:
+                  case CF_LAST:
+                  default:
+
+                      fetch_result = hv_fetch(ds_cdp_prep, "value", 5, 0);
+                      value = SvNV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_val].u_val = value;
+
+                      fetch_result =
+                          hv_fetch(ds_cdp_prep, "unknown_datapoints", 18, 0);
+                      uival = SvUV(*fetch_result);
+                      cur_cdp_prep->scratch[CDP_unkn_pdp_cnt].u_cnt = uival;
+
+                      break;
+                  }
+              }
+              /* finished processing cdp_prep for each DS for this RRA */
+              
+              
+          }
+      }
+
+
+      local_rrd_free(rrd);
+  }
+
+
+
+#  Emacs formatting hints
+#
+#  Local Variables:
+#  mode: c
+#  indent-tabs-mode: nil
+#  End:
 

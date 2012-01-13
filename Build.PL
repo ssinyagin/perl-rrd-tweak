@@ -10,9 +10,10 @@ my $builder = Module::Build->new(
     build_requires => {
         'Test::More' => 0,
         'ExtUtils::CBuilder' => 0,
+        'RRDs' => 0,
     },
     requires => {
-        'RRDs' => 0,
+        perl => '5.8.8',
     },
     extra_linker_flags   => ['-lrrd'],
     add_to_cleanup      => [ 'RRD-Tweak-*' ],

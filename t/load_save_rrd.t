@@ -13,10 +13,10 @@ BEGIN {
 
 diag("Testing RRD::Tweak $RRD::Tweak::VERSION, Perl $], $^X");
 
-my $filename = tmpnam();
+my $filename1 = tmpnam();
 
-RRDs::create($filename, '--step', '300',
-             'DS:x1:GAUGE:600:-273.0:5000',
+RRDs::create($filename1, '--step', '300',
+             'DS:x1:GAUGE:600:-1e10:1e15',
              'DS:x2:GAUGE:600:0.0001:U',
              'RRA:AVERAGE:0.5:1:1200',
              'RRA:HWPREDICT:1440:0.1:0.0035:288:3',
@@ -29,7 +29,7 @@ RRDs::create($filename, '--step', '300',
              'RRA:AVERAGE:0.5:12:2400');
 
 my $err = RRDs::error();
-ok((not $err), "creating RRD file: $filename") or
+ok((not $err), "creating RRD file: $filename1") or
   BAIL_OUT("Cannot create RRD file: " . $err);
 
 my $n_ds = 2;
@@ -39,8 +39,8 @@ my $n_rra0_steps = 1200;
 my $rrd = RRD::Tweak->new();
 ok((defined($rrd)), "RRD::Tweak->new()");
 
-diag("\$rrd->load_file($filename)");
-$rrd->load_file($filename);
+diag("\$rrd->load_file($filename1)");
+$rrd->load_file($filename1);
 
 ok((defined($rrd->{version}) and defined($rrd->{pdp_step}) and
     defined($rrd->{last_up}) and ref($rrd->{ds}) and ref($rrd->{rra}) and
@@ -78,9 +78,12 @@ check_expr('scalar(@{$rrd->{cdp_data}[0]})', '$n_rra0_steps');
 check_expr('scalar(@{$rrd->{cdp_data}[0][0]})', '$n_ds');
 
 
+diag("last_up: " . $rrd->{last_up});
 # print Dumper($rrd);
+print Dumper($rrd->{ds});
+print Dumper($rrd->{rra});
 
-ok((unlink $filename), "unlink $filename");
+ok((unlink $filename1), "unlink $filename1");
 
 
 
