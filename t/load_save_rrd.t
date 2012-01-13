@@ -91,7 +91,7 @@ $rrd->save_file($filename2);
 diag("Saved $filename2");
 
 
-ok((unlink $filename1), "unlink $filename1");
+# ok((unlink $filename1), "unlink $filename1");
 
 
 

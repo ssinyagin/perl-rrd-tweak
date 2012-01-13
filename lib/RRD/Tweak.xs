@@ -466,6 +466,11 @@ _save_file(HV *self, char *filename)
       }
       strncpy(rrd->stat_head->version, ptr, sizeof(rrd->stat_head->version));
 
+      /* get $self->{pdp_step} */
+      fetch_result = hv_fetch(self, "pdp_step", 8, 0);
+      uival = SvUV(*fetch_result);
+      rrd->stat_head->pdp_step = uival;
+      
       /* get $self->{last_up} */
       fetch_result = hv_fetch(self, "last_up", 7, 0);
       uival = SvUV(*fetch_result);
