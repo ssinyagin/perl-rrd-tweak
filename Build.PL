@@ -16,6 +16,7 @@ my $builder = Module::Build->new(
         perl => '5.8.8',
     },
     extra_linker_flags   => ['-lrrd'],
+    extra_compiler_flags => ['-O0', '-g'],
     add_to_cleanup      => [ 'RRD-Tweak-*' ],
     create_makefile_pl => 'traditional',
 );

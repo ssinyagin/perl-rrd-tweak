@@ -39,7 +39,40 @@ sub new {
     my $class = shift;    
     my $self = {};
     bless $self, $class;
+
+    $self->{errmsg} = '';
     return $self;
+}
+
+
+=head2 validate
+
+  $status = $rrd->validate();
+
+Validates the contents of an RRD::Tweak object and returns false if the
+data is inconsistent. In case of failed validation, $rrd->errmsg()
+returns a human-readable explanation of the failure.
+
+=cut
+
+sub validate {
+    my $self = shift;
+    # TODO: do the real validation
+    return 1;
+}
+
+
+=head2 errmsg
+
+  $msg = $rrd->errmsg();
+
+Returns a text string explaining the details if $rrd->validate() failed.
+
+=cut
+
+sub errmsg {
+    my $self = shift;
+    return $self->{errmsg};
 }
 
 
@@ -51,7 +84,46 @@ Reads the RRD file and stores its whole content in the RRD::Tweak object
 
 =cut
 
-# load_file is implemented in Tweak.xs
+sub load_file {
+    my $self = shift;
+    my $filename = shift;
+
+    # the native method is defined in Tweak.xs and uses librrd methods
+    $self->_load_file($filename);
+
+    if( not $self->validate() ) {
+        croak("load_file prodiced an invalid RRD::Tweak object: " .
+              $self->errmsg());
+    }
+    
+    return;
+}
+
+
+=head2 save_file
+
+ $rrd->save_file($filename);
+
+Creates a new RRD file from the contents of the RRD::Tweak object. If
+the file already exists, it's truncated and overwritten.
+
+=cut
+
+sub save_file {
+    my $self = shift;
+    my $filename = shift;
+
+    if( not $self->validate() ) {
+        croak("Cannot run save_file because RRD::Tweak object is invalid:"  .
+              $self->errmsg());
+    }
+
+    # the native method is defined in Tweak.xs and uses librrd methods
+    $self->_save_file($filename);
+    
+    return;
+}
+
 
 
 

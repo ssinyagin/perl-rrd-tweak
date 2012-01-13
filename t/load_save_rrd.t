@@ -14,6 +14,7 @@ BEGIN {
 diag("Testing RRD::Tweak $RRD::Tweak::VERSION, Perl $], $^X");
 
 my $filename1 = tmpnam();
+my $filename2 = tmpnam();
 
 RRDs::create($filename1, '--step', '300',
              'DS:x1:GAUGE:600:-1e10:1e15',
@@ -77,11 +78,18 @@ check_expr('scalar(@{$rrd->{cdp_prep}[0]})', '$n_ds');
 check_expr('scalar(@{$rrd->{cdp_data}[0]})', '$n_rra0_steps');
 check_expr('scalar(@{$rrd->{cdp_data}[0][0]})', '$n_ds');
 
+print Dumper($rrd->{cdp_prep});
 
-diag("last_up: " . $rrd->{last_up});
+
 # print Dumper($rrd);
-print Dumper($rrd->{ds});
-print Dumper($rrd->{rra});
+# print Dumper($rrd->{ds});
+# print Dumper($rrd->{rra});
+
+
+diag("Saving $filename2");
+$rrd->save_file($filename2);
+diag("Saved $filename2");
+
 
 ok((unlink $filename1), "unlink $filename1");
 

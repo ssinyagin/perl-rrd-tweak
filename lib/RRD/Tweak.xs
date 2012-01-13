@@ -4,6 +4,7 @@
 #include "perl.h"
 #include "XSUB.h"
 
+#include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <time.h>
@@ -394,15 +395,38 @@ _save_file(HV *self, char *filename)
     SV           **fetch_result;
     STRLEN       len;
     char         *ptr;
-    unsigned int i, ii, uival, rrd_file_version;
+    unsigned int i, ii, iii, uival, rrd_file_version;
     rrd_value_t  value;
     unsigned int n_ds = 0; /* number of DS'es */
     unsigned int n_rra = 0; /* number of RRA's */
+    int          fd;
+    FILE         *fh;
+    AV           *cdp_data_array;
+    rrd_value_t  *row_buf;
   CODE:
   {
       /* This function is derived from rrd_restore.c
          We do not validate $self here and assume that $self->validate()
          was called before. */
+
+      /* Open the file as early as possible. We overwrite and truncate
+         any existing file. */
+      
+      fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+      if (fd == -1) {
+          croak("Cannot open %s for writing: %s", filename, strerror(errno));
+      }
+      
+      fh = fdopen(fd, "wb");
+      if (fh == NULL) {
+          close(fd);
+          croak("fdopen failed: %s", strerror(errno));
+      }
+      
+      /* We translate all the header data into RRDtool native format.
+         The CDP rows will be processed sequentially while writing to the file,
+         so that we don't have to allocate memory for the whole data amount.
+      */
 
       rrd = (rrd_t *) malloc(sizeof(rrd_t));
       if (rrd == NULL) {
@@ -442,19 +466,31 @@ _save_file(HV *self, char *filename)
       }
       strncpy(rrd->stat_head->version, ptr, sizeof(rrd->stat_head->version));
 
-      /* last update */
+      /* get $self->{last_up} */
       fetch_result = hv_fetch(self, "last_up", 7, 0);
       uival = SvUV(*fetch_result);
       rrd->live_head->last_up = uival;
+      
+      /* get $self->{cdp_data} */
+      fetch_result = hv_fetch(self, "cdp_data", 8, 0);
+      cdp_data_array = (AV *)SvRV(*fetch_result);
 
       /* ds */
       {
           AV *ds_array;
 
+          /* get $self->{ds} */
           fetch_result = hv_fetch(self, "ds", 2, 0);
           ds_array = (AV *)SvRV(*fetch_result);
           n_ds = av_len(ds_array) + 1;
 
+          /* buffer of CDP row values for writing into the file */
+          row_buf = (rrd_value_t *) malloc(sizeof(rrd_value_t) * n_ds);
+          if( row_buf == NULL ) {
+              local_rrd_free(rrd);
+              croak("save_file: malloc failed.");
+          }
+          
           /* Allocate space for DS definitions */
           rrd->ds_def = (ds_def_t *) malloc(sizeof(ds_def_t) * n_ds);
           if( rrd->ds_def == NULL ) {
@@ -473,7 +509,7 @@ _save_file(HV *self, char *filename)
 
           rrd->stat_head->ds_cnt = n_ds;
 
-          for(i = 0; i < n_ds; i++) {
+          for (i = 0; i < n_ds; i++) {
               HV *ds_params;
               ds_def_t *cur_ds_def = rrd->ds_def + i;
               pdp_prep_t *cur_pdp_prep = rrd->pdp_prep + i;
@@ -539,14 +575,16 @@ _save_file(HV *self, char *filename)
           AV *rra_array;
           AV *cdp_prep_array;
 
+          /* get $self->{rra} */
           fetch_result = hv_fetch(self, "rra", 3, 0);
           rra_array = (AV *)SvRV(*fetch_result);
           n_rra = av_len(rra_array) + 1;
 
+          /* get $self->{cdp_prep} */
           fetch_result = hv_fetch(self, "cdp_prep", 8, 0);
           cdp_prep_array = (AV *)SvRV(*fetch_result);
 
-          /* Allocate rra_def space for all RRA's */
+          /* Allocate rra_def space for all RRA definitions */
           rrd->rra_def =
               (rra_def_t *) malloc(sizeof(rra_def_t) * n_rra);
           if( rrd->rra_def == NULL ) {
@@ -575,15 +613,15 @@ _save_file(HV *self, char *filename)
 
           rrd->stat_head->rra_cnt = n_rra;
 
-          for(i = 0; i < n_rra; i++)  {
+          for (i = 0; i < n_rra; i++)  {
               const char *cf;
               unsigned int cf_num;
               HV *rra_params;
               AV *rra_cdp_prep_array;
+              AV *rra_cdp_data_array;
 
               rra_def_t *cur_rra_def = rrd->rra_def + i;
-              rra_ptr_t *cur_rra_ptr;
-
+              
               /* get rra_params hash from rra_array->[i] */
               fetch_result = av_fetch(rra_array, i, 0);
               rra_params = (HV *)SvRV(*fetch_result);
@@ -591,6 +629,14 @@ _save_file(HV *self, char *filename)
               /* get rra_cdp_prep_array from cdp_prep_array->[i] */
               fetch_result = av_fetch(cdp_prep_array, i, 0);
               rra_cdp_prep_array = (AV *)SvRV(*fetch_result);
+
+              /* Calculate RRA row count from length($self->{cdp_data}[$i]) */
+              fetch_result = av_fetch(cdp_data_array, i, 0);
+              rra_cdp_data_array = (AV *)SvRV(*fetch_result);
+              cur_rra_def->row_cnt = av_len(rra_cdp_data_array) + 1;
+              
+              /* Set the RRA pointer to a random location */
+              rrd->rra_ptr[i].cur_row = rrd_random() % cur_rra_def->row_cnt;
 
               /* RRA cf */
               fetch_result = hv_fetch(rra_params, "cf", 2, 0);
@@ -695,7 +741,7 @@ _save_file(HV *self, char *filename)
                   HV *ds_cdp_prep;
 
                   /* get ds_cdp_prep hash from rra_cdp_prep_array->[ii] */
-                  fetch_result = av_fetch(cdp_prep_array, ii, 0);
+                  fetch_result = av_fetch(rra_cdp_prep_array, ii, 0);
                   ds_cdp_prep = (HV *)SvRV(*fetch_result);
 
                   /* cdp_prep parameters specific to each CF */
@@ -794,14 +840,61 @@ _save_file(HV *self, char *filename)
                       break;
                   }
               }
-              /* finished processing cdp_prep for each DS for this RRA */
-              
-              
+              /* Finished processing cdp_prep for each DS for this RRA. */
           }
       }
 
+      /* RRD header is ready. Start writing to the file. */
+      
+      fwrite(rrd->stat_head, sizeof(stat_head_t), 1, fh);
+      fwrite(rrd->ds_def, sizeof(ds_def_t), n_ds, fh);
+      fwrite(rrd->rra_def, sizeof(rra_def_t), n_rra, fh);
+      fwrite(rrd->live_head, sizeof(live_head_t), 1, fh);
+      fwrite(rrd->pdp_prep, sizeof(pdp_prep_t), n_ds, fh);
+      fwrite(rrd->cdp_prep, sizeof(cdp_prep_t), n_rra * n_ds, fh);
+      fwrite(rrd->rra_ptr, sizeof(rra_ptr_t), n_rra, fh);
 
+      /* write CDP values */
+      for (i = 0; i < n_rra; i++) {
+          unsigned long num_rows = rrd->rra_def[i].row_cnt;
+          unsigned long cur_row = rrd->rra_ptr[i].cur_row;
+          AV *rra_cdp_data_array;
+
+          /* get $self->{cdp_data}[$i] */
+          fetch_result = av_fetch(cdp_data_array, i, 0);
+          rra_cdp_data_array = (AV *)SvRV(*fetch_result);
+          
+          for (ii = 0; ii < num_rows; ii++) {
+              AV *row_cdp_data;
+              
+              if (cur_row >= num_rows) {
+                  cur_row = 0;
+              }
+              
+              fetch_result = av_fetch(rra_cdp_data_array, cur_row, 0);
+              row_cdp_data = (AV *)SvRV(*fetch_result);
+
+              for (iii = 0; iii < n_ds; iii++) {
+                  fetch_result = av_fetch(row_cdp_data, iii, 0);
+                  row_buf[i] = SvNV(*fetch_result);
+              }
+              
+              fwrite(row_buf, sizeof(rrd_value_t), n_ds, fh);
+              cur_row++;
+          }
+      }
+      
+      /* lets see if we had an error */
+      if (ferror(fh)) {
+          local_rrd_free(rrd);
+          free(row_buf);
+          croak("Error while writing '%s': %s", filename, strerror(errno));
+          fclose(fh);
+      }
+
+      fclose(fh);
       local_rrd_free(rrd);
+      free(row_buf);
   }
 
 
