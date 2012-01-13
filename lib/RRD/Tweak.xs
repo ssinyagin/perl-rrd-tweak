@@ -876,7 +876,7 @@ _save_file(HV *self, char *filename)
 
               for (iii = 0; iii < n_ds; iii++) {
                   fetch_result = av_fetch(row_cdp_data, iii, 0);
-                  row_buf[i] = SvNV(*fetch_result);
+                  row_buf[iii] = SvNV(*fetch_result);
               }
               
               fwrite(row_buf, sizeof(rrd_value_t), n_ds, fh);
