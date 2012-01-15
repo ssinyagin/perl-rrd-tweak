@@ -657,8 +657,12 @@ _save_file(HV *self, char *filename)
               /* RRA parameters specific to each CF */
               switch (cf_num) {
 
-              case CF_HWPREDICT:
               case CF_MHWPREDICT:
+                  /* MHWPREDICT causes Version 4 */
+                  strcpy(rrd->stat_head->version, RRD_VERSION4);
+                  rrd_file_version = 4;
+
+              case CF_HWPREDICT:
                   fetch_result = hv_fetch(rra_params, "hw_alpha", 8, 0);
                   value = SvNV(*fetch_result);
                   cur_rra_def->par[RRA_hw_alpha].u_val = value;
@@ -685,12 +689,16 @@ _save_file(HV *self, char *filename)
                   uival = SvUV(*fetch_result);
                   cur_rra_def->par[RRA_seasonal_smooth_idx].u_cnt = uival;
 
-                  if (rrd_file_version >= 4) {
-                      fetch_result =
-                          hv_fetch(rra_params, "smoothing_window", 16, 0);
+                  
+                  fetch_result =
+                      hv_fetch(rra_params, "smoothing_window", 16, 0);
+                  if( fetch_result != NULL ) {
                       value = SvNV(*fetch_result);
                       cur_rra_def->par[RRA_seasonal_smoothing_window].u_val =
                           value;
+                      /* smoothing-window causes Version 4 */
+                      strcpy(rrd->stat_head->version, RRD_VERSION4);
+                      rrd_file_version = 4;
                   }
 
                   fetch_result =
