@@ -276,10 +276,10 @@ _load_file(HV *self, char *filename)
 
 
                   uival = cur_cdp_prep->scratch[CDP_null_count].u_cnt;
-                  hv_store(ds_cdp_prep, "nan_count", 9, newSVuv(uival), 0);
+                  hv_store(ds_cdp_prep, "null_count", 10, newSVuv(uival), 0);
 
                   uival = cur_cdp_prep->scratch[CDP_last_null_count].u_cnt;
-                  hv_store(ds_cdp_prep, "last_nan_count", 14,
+                  hv_store(ds_cdp_prep, "last_null_count", 15,
                            newSVuv(uival), 0);
                   break;
 
@@ -455,10 +455,12 @@ _save_file(HV *self, char *filename)
       /* store the version. If $self->{version} is not 4, use 3 */
       fetch_result = hv_fetch(self, "version", 7, 0);
       ptr = NULL;
-      uival = SvUV(*fetch_result);
-      if( uival == 4 ) {
-          rrd_file_version = 4;
-          ptr = RRD_VERSION4;
+      if( fetch_result != NULL ) {
+          uival = SvUV(*fetch_result);
+          if( uival == 4 ) {
+              rrd_file_version = 4;
+              ptr = RRD_VERSION4;
+          }
       }
       if( ptr == NULL ) {
           rrd_file_version = 3;
@@ -781,13 +783,13 @@ _save_file(HV *self, char *filename)
                       value = SvNV(*fetch_result);
                       cur_cdp_prep->scratch[CDP_hw_last_slope].u_val = value;
 
-                      fetch_result = hv_fetch(ds_cdp_prep, "nan_count", 9, 0);
+                      fetch_result = hv_fetch(ds_cdp_prep, "null_count", 10, 0);
                       uival = SvUV(*fetch_result);
                       cur_cdp_prep->scratch[CDP_null_count].u_cnt = uival;
 
 
                       fetch_result =
-                          hv_fetch(ds_cdp_prep, "last_nan_count", 14, 0);
+                          hv_fetch(ds_cdp_prep, "last_null_count", 15, 0);
                       uival = SvUV(*fetch_result);
                       cur_cdp_prep->scratch[CDP_last_null_count].u_cnt = uival;
 
