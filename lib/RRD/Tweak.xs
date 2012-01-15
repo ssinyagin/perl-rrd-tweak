@@ -859,10 +859,13 @@ _save_file(HV *self, char *filename)
       fwrite(rrd->cdp_prep, sizeof(cdp_prep_t), n_rra * n_ds, fh);
       fwrite(rrd->rra_ptr, sizeof(rra_ptr_t), n_rra, fh);
 
-      /* write CDP values */
+      /* write CDP values. cur_row points somewhere in the middle of the
+       * RRA on the disk, but we write it sequentially */
+      
       for (i = 0; i < n_rra; i++) {
           unsigned long num_rows = rrd->rra_def[i].row_cnt;
-          unsigned long cur_row = rrd->rra_ptr[i].cur_row;
+          unsigned long disk_start_row = rrd->rra_ptr[i].cur_row;
+          unsigned long mem_cur_row = num_rows - disk_start_row - 1;
           AV *rra_cdp_data_array;
 
           /* get $self->{cdp_data}[$i] */
@@ -872,11 +875,11 @@ _save_file(HV *self, char *filename)
           for (ii = 0; ii < num_rows; ii++) {
               AV *row_cdp_data;
               
-              if (cur_row >= num_rows) {
-                  cur_row = 0;
+              if (mem_cur_row >= num_rows) {
+                  mem_cur_row = 0;
               }
               
-              fetch_result = av_fetch(rra_cdp_data_array, cur_row, 0);
+              fetch_result = av_fetch(rra_cdp_data_array, mem_cur_row, 0);
               row_cdp_data = (AV *)SvRV(*fetch_result);
 
               for (iii = 0; iii < n_ds; iii++) {
@@ -885,7 +888,7 @@ _save_file(HV *self, char *filename)
               }
               
               fwrite(row_buf, sizeof(rrd_value_t), n_ds, fh);
-              cur_row++;
+              mem_cur_row++;
           }
       }
       
