@@ -1,7 +1,7 @@
 package RRD::Tweak;
 
-use warnings;
 use strict;
+use warnings;
 use Carp;
 
 
@@ -36,7 +36,7 @@ Creates a new RRD::Tweak object
 =cut
 
 sub new {
-    my $class = shift;    
+    my $class = shift;
     my $self = {};
     bless $self, $class;
 
@@ -55,9 +55,262 @@ returns a human-readable explanation of the failure.
 
 =cut
 
+# CF names and corresponding required attributes
+my %cf_names_and_rra_attributes =
+    ('AVERAGE'      => ['xff'],
+     'MIN'          => ['xff'],
+     'MAX'          => ['xff'],
+     'LAST'         => ['xff'],
+     'HWPREDICT'    => ['hw_alpha', 'hw_beta', 'dependent_rra_idx'],
+     'MHWPREDICT'   => ['hw_alpha', 'hw_beta', 'dependent_rra_idx'],
+     'DEVPREDICT'   => ['dependent_rra_idx'],
+     'SEASONAL'     => ['seasonal_gamma', 'seasonal_smooth_idx',
+                        'dependent_rra_idx'],
+     'DEVSEASONAL'  => ['seasonal_gamma', 'seasonal_smooth_idx',
+                        'dependent_rra_idx'],
+     'FAILURES'     => ['delta_pos', 'delta_neg', 'window_len',
+                        'failure_threshold', 'dependent_rra_idx'],
+    );
+
+# required cdp_prep attributes for each CF
+my %cdp_prep_attributes =
+    ('AVERAGE'      => ['value', 'unknown_datapoints'],
+     'MIN'          => ['value', 'unknown_datapoints'],
+     'MAX'          => ['value', 'unknown_datapoints'],
+     'LAST'         => ['value', 'unknown_datapoints'],
+     'HWPREDICT'    => ['intercept', 'last_intercept', 'slope', 'last_slope',
+                        'nan_count', 'last_nan_count'],
+     'MHWPREDICT'   => ['intercept', 'last_intercept', 'slope', 'last_slope',
+                        'nan_count', 'last_nan_count'],
+     'DEVPREDICT'   => [],
+     'SEASONAL'     => ['seasonal', 'last_seasonal', 'init_flag'],
+     'DEVSEASONAL'  => ['seasonal', 'last_seasonal', 'init_flag'],
+     'FAILURES'     => ['history'],
+    );
+
+
+
 sub validate {
     my $self = shift;
-    # TODO: do the real validation
+
+    # validate positive numbers
+    foreach my $key ('pdp_step', 'last_up') {
+        if( not defined($self->{$key}) ) {
+            $self->_set_errmsg('$self->{' . $key . '} is undefined');
+            return 0;
+        }
+        if( not eval {$self->{$key} > 0}) {
+            $self->_set_errmsg('$self->{' . $key .
+                               '} is not a positive number');
+            return 0;
+        }
+    }
+
+    # validate the presence of arrays
+    foreach my $key ('ds', 'rra', 'cdp_prep', 'cdp_data') {
+        if( not defined($self->{$key}) ) {
+            $self->_set_errmsg('$self->{' . $key . '} is undefined');
+            return 0;
+        }
+        if( ref($self->{$key}) ne 'ARRAY' ) {
+            $self->_set_errmsg('$self->{' . $key .
+                               '} is not an ARRAY');
+            return 0;
+        }
+    }
+
+    # Check that we have a positive number of DS'es
+    my $n_ds = scalar(@{$self->{ds}});
+    if( $n_ds == 0 ) {
+        $self->_set_errmsg('no datasources are defined in RRD');
+        return 0;
+    }
+
+    # validate each DS definition
+    for( my $ds=0; $ds < $n_ds; $ds++ ) {
+        my $r = $self->{ds}[$ds];
+
+        # validate strings
+        foreach my $key ('name', 'type', 'last_ds') {
+            if( not defined($r->{$key}) ) {
+                $self->_set_errmsg('$self->{ds}[' . $ds .
+                                   ']{' . $key . '} is undefined');
+                return 0;
+            }
+            if( $r->{$key} eq '' ) {
+                $self->_set_errmsg('$self->{ds}[' . $ds .
+                                   ']{' . $key . '} is empty');
+                return 0;
+            }
+        }
+
+        # validate numbers
+        my @number_keys = ('scratch_value', 'unknown_sec');
+        if( $r->{type} ne 'COMPUTE' ) {
+            push(@number_keys, 'hb', 'min', 'max');
+        } else {
+            # COMPUTE is not currently supported by Tweak.xs because RPN
+            # processing methods are not exported by librrd
+            push(@number_keys, 'rpn');
+        }
+
+        foreach my $key (@number_keys) {
+            if( not defined($r->{$key}) ) {
+                $self->_set_errmsg('$self->{ds}[' . $ds .
+                                   ']{' . $key . '} is undefined');
+                return 0;
+            }
+
+            if( $r->{$key} !~ /nan$/i and
+                $r->{$key} !~ /^[0-9e+\-.]+$/i ) {
+                $self->_set_errmsg('$self->{ds}[' . $ds .
+                                   ']{' . $key . '} is not a number');
+                return 0;
+            }
+        }
+    }
+
+    # Check that we have a positive number of RRA's
+    my $n_rra = scalar(@{$self->{rra}});
+    if( $n_rra == 0 ) {
+        $self->_set_errmsg('no round-robin arrays are defined in RRD');
+        return 0;
+    }
+
+    for( my $rra=0; $rra < $n_rra; $rra++) {
+        my $r = $self->{rra}[$rra];
+
+        if( ref($r) ne 'HASH' ) {
+            $self->_set_errmsg('$self->{rra}[' . $rra . '] is not a HASH');
+            return 0;
+        }
+
+        my $cf = $r->{cf};
+        if( not defined($cf) ) {
+            $self->_set_errmsg('$self->{rra}[' . $rra . ']{cf} is undefined');
+            return 0;
+        }
+
+        my $pdp_per_row = $r->{pdp_per_row};
+        if( not defined($pdp_per_row) ) {
+            $self->_set_errmsg('$self->{rra}[' . $rra .
+                               ']{pdp_per_row} is undefined');
+            return 0;
+        }
+        if( 0 + $pdp_per_row <= 0 ) {
+            $self->_set_errmsg('$self->{rra}[' . $rra .
+                               ']{pdp_per_row} is not a positive integer');
+            return 0;
+        }
+
+        if( not defined($cf_names_and_rra_attributes{$cf}) ) {
+            $self->_set_errmsg('Unknown CF name in $self->{rra}[' . $rra .
+                               ']{cf}: ' . $cf);
+            return 0;
+        }
+
+        foreach my $key (@{$cf_names_and_rra_attributes{$cf}}) {
+            if( not defined($r->{$key}) ) {
+                $self->_set_errmsg('$self->{rra}[' . $rra . ']{' . $key .
+                                   '} is undefined');
+                return 0;
+            }
+        }
+    }
+
+    # validate cdp_prep
+    for( my $rra=0; $rra < $n_rra; $rra++) {
+
+        if( ref($self->{cdp_prep}[$rra]) ne 'ARRAY' ) {
+            $self->_set_errmsg('$self->{cdp_prep}[' . $rra .
+                               '] is not an ARRAY');
+            return 0;
+        }
+
+        my $cf = $self->{rra}[$rra]{cf};
+
+        for( my $ds=0; $ds < $n_ds; $ds++ ) {
+            my $r = $self->{cdp_prep}[$rra][$ds];
+
+            if( ref($r) ne 'HASH' ) {
+                $self->_set_errmsg('$self->{cdp_prep}[' . $rra .
+                                   '][' . $ds . '] is not an HASH');
+                return 0;
+            }
+
+            foreach my $key (@{$cdp_prep_attributes{$cf}}) {
+                if( not defined($r->{$key}) ) {
+                    $self->_set_errmsg
+                        ('$self->{cdp_prep}[' . $rra .
+                         '][' . $ds . ']{' . $key . '} is undefined');
+                    return 0;
+                }
+            }
+
+            if( $cf eq 'FAILURES' ) {
+                if( ref($r->{history}) ne 'ARRAY' ) {
+                    $self->_set_errmsg
+                        ('$self->{cdp_prep}[' . $rra .
+                         '][' . $ds . ']{history} is not an ARRAY');
+                    return 0;
+                }
+
+                # in rrd_format.h: MAX_FAILURES_WINDOW_LEN=28
+                if( scalar(@{$r->{history}}) > 28 ) {
+                    $self->_set_errmsg
+                        ('$self->{cdp_prep}[' . $rra .
+                         '][' . $ds . ']{history} is a too large array');
+                    return 0;
+                }
+            }
+        }
+    }
+
+    # validate cdp_data
+    for( my $rra=0; $rra < $n_rra; $rra++) {
+
+        my $rra_data = $self->{cdp_data}[$rra];
+        if( ref($rra_data) ne 'ARRAY' ) {
+            $self->_set_errmsg('$self->{cdp_data}[' . $rra .
+                               '] is not an ARRAY');
+            return 0;
+        }
+
+        my $rra_len = scalar(@{$rra_data});
+        if( $rra_len == 0 ) {
+            $self->_set_errmsg('$self->{cdp_data}[' . $rra .
+                               '] is an empty array');
+            return 0;
+        }
+
+        for( my $row=0; $row < $rra_len; $row++ ) {
+            my $row_data = $rra_data->[0];
+            if( ref($row_data) ne 'ARRAY' ) {
+                $self->_set_errmsg('$self->{cdp_data}[' . $rra .
+                                   '][' . $row . '] is not an ARRAY');
+                return 0;
+            }
+
+            my $row_len = scalar(@{$row_data});
+            if( $row_len != $n_ds ) {
+                $self->_set_errmsg('$self->{cdp_data}[' . $rra .
+                                   '][' . $row . '] array has wrong size. ' .
+                                   'Expected: ' . $n_ds . ', found: ' .
+                                   $row_len);
+                return 0;
+            }
+
+            for( my $ds=0; $ds < $n_ds; $ds++ ) {
+                if( not defined($row_data->[$ds]) ) {
+                    $self->_set_errmsg('$self->{cdp_prep}[' . $rra .
+                                       '][' . $ds . '][' . $ds .
+                                       '] is undefined');
+                    return 0;
+                }
+            }
+        }
+    }
+
     return 1;
 }
 
@@ -75,9 +328,15 @@ sub errmsg {
     return $self->{errmsg};
 }
 
+sub _set_errmsg {
+    my $self = shift;
+    my $msg = shift;
+    $self->{errmsg} = $msg;
+    return;
+}
+
 
 =head2 load_file
-
  $rrd->load_file($filename);
 
 Reads the RRD file and stores its whole content in the RRD::Tweak object
@@ -92,10 +351,10 @@ sub load_file {
     $self->_load_file($filename);
 
     if( not $self->validate() ) {
-        croak("load_file prodiced an invalid RRD::Tweak object: " .
+        croak('load_file prodiced an invalid RRD::Tweak object: ' .
               $self->errmsg());
     }
-    
+
     return;
 }
 
@@ -114,13 +373,13 @@ sub save_file {
     my $filename = shift;
 
     if( not $self->validate() ) {
-        croak("Cannot run save_file because RRD::Tweak object is invalid:"  .
+        croak('Cannot run save_file because RRD::Tweak object is invalid: '  .
               $self->errmsg());
     }
 
     # the native method is defined in Tweak.xs and uses librrd methods
     $self->_save_file($filename);
-    
+
     return;
 }
 
@@ -175,11 +434,11 @@ See also I<rrdcreate> manual page of RRDTool for more details.
 sub create {
     my $self = shift;
     my $args = shift;
-    
+
     ref($args) or croak('create() requies a hashref as argument');
     ref($args->{ds}) or croak('create() requires "ds" in the argument');
     ref($args->{rra}) or croak('create() requires "rra" in the argument');
-    
+
     my $pdp_step = $args->{step};
     $pdp_step = 300 unless defined($pdp_step);
 
@@ -188,7 +447,7 @@ sub create {
 
     foreach my $ds_name (sort keys %{$args->{ds}} ) {
         my $r = $args->{ds}{$ds_name};
-        
+
         defined($r->{type}) or croak('DS ' . $ds_name . ' is missing "type"');
         defined($r->{heartbeat}) or
             croak('DS ' . $ds_name . ' is missing "heartbeat"');
@@ -198,7 +457,7 @@ sub create {
 }
 
 
-    
+
 =head1 AUTHOR
 
 Stanislav Sinyagin, C<< <ssinyagin at k-open.com> >>

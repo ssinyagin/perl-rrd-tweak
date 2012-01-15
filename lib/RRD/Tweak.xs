@@ -292,7 +292,7 @@ _load_file(HV *self, char *filename)
                   hv_store(ds_cdp_prep, "last_seasonal", 13, newSVnv(value), 0);
 
                   uival = cur_cdp_prep->scratch[CDP_init_seasonal].u_cnt;
-                  hv_store(ds_cdp_prep, "init_flag", 10,
+                  hv_store(ds_cdp_prep, "init_flag", 9,
                            newSVuv(uival), 0);
                   break;
 
@@ -411,18 +411,18 @@ _save_file(HV *self, char *filename)
 
       /* Open the file as early as possible. We overwrite and truncate
          any existing file. */
-      
+
       fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
       if (fd == -1) {
           croak("Cannot open %s for writing: %s", filename, strerror(errno));
       }
-      
+
       fh = fdopen(fd, "wb");
       if (fh == NULL) {
           close(fd);
           croak("fdopen failed: %s", strerror(errno));
       }
-      
+
       /* We translate all the header data into RRDtool native format.
          The CDP rows will be processed sequentially while writing to the file,
          so that we don't have to allocate memory for the whole data amount.
@@ -470,12 +470,12 @@ _save_file(HV *self, char *filename)
       fetch_result = hv_fetch(self, "pdp_step", 8, 0);
       uival = SvUV(*fetch_result);
       rrd->stat_head->pdp_step = uival;
-      
+
       /* get $self->{last_up} */
       fetch_result = hv_fetch(self, "last_up", 7, 0);
       uival = SvUV(*fetch_result);
       rrd->live_head->last_up = uival;
-      
+
       /* get $self->{cdp_data} */
       fetch_result = hv_fetch(self, "cdp_data", 8, 0);
       cdp_data_array = (AV *)SvRV(*fetch_result);
@@ -495,7 +495,7 @@ _save_file(HV *self, char *filename)
               local_rrd_free(rrd);
               croak("save_file: malloc failed.");
           }
-          
+
           /* Allocate space for DS definitions */
           rrd->ds_def = (ds_def_t *) malloc(sizeof(ds_def_t) * n_ds);
           if( rrd->ds_def == NULL ) {
@@ -626,7 +626,7 @@ _save_file(HV *self, char *filename)
               AV *rra_cdp_data_array;
 
               rra_def_t *cur_rra_def = rrd->rra_def + i;
-              
+
               /* get rra_params hash from rra_array->[i] */
               fetch_result = av_fetch(rra_array, i, 0);
               rra_params = (HV *)SvRV(*fetch_result);
@@ -639,7 +639,7 @@ _save_file(HV *self, char *filename)
               fetch_result = av_fetch(cdp_data_array, i, 0);
               rra_cdp_data_array = (AV *)SvRV(*fetch_result);
               cur_rra_def->row_cnt = av_len(rra_cdp_data_array) + 1;
-              
+
               /* Set the RRA pointer to a random location */
               rrd->rra_ptr[i].cur_row = rrd_random() % cur_rra_def->row_cnt;
 
@@ -689,7 +689,7 @@ _save_file(HV *self, char *filename)
                   uival = SvUV(*fetch_result);
                   cur_rra_def->par[RRA_seasonal_smooth_idx].u_cnt = uival;
 
-                  
+
                   fetch_result =
                       hv_fetch(rra_params, "smoothing_window", 16, 0);
                   if( fetch_result != NULL ) {
@@ -805,7 +805,7 @@ _save_file(HV *self, char *filename)
                       value = SvNV(*fetch_result);
                       cur_cdp_prep->scratch[CDP_hw_last_seasonal].u_val = value;
 
-                      fetch_result = hv_fetch(ds_cdp_prep, "init_flag", 10, 0);
+                      fetch_result = hv_fetch(ds_cdp_prep, "init_flag", 9, 0);
                       uival = SvUV(*fetch_result);
                       cur_cdp_prep->scratch[CDP_init_seasonal].u_cnt = uival;
 
@@ -858,7 +858,7 @@ _save_file(HV *self, char *filename)
       }
 
       /* RRD header is ready. Start writing to the file. */
-      
+
       fwrite(rrd->stat_head, sizeof(stat_head_t), 1, fh);
       fwrite(rrd->ds_def, sizeof(ds_def_t), n_ds, fh);
       fwrite(rrd->rra_def, sizeof(rra_def_t), n_rra, fh);
@@ -869,7 +869,7 @@ _save_file(HV *self, char *filename)
 
       /* write CDP values. cur_row points somewhere in the middle of the
        * RRA on the disk, but we write it sequentially */
-      
+
       for (i = 0; i < n_rra; i++) {
           unsigned long num_rows = rrd->rra_def[i].row_cnt;
           unsigned long disk_start_row = rrd->rra_ptr[i].cur_row;
@@ -879,14 +879,14 @@ _save_file(HV *self, char *filename)
           /* get $self->{cdp_data}[$i] */
           fetch_result = av_fetch(cdp_data_array, i, 0);
           rra_cdp_data_array = (AV *)SvRV(*fetch_result);
-          
+
           for (ii = 0; ii < num_rows; ii++) {
               AV *row_cdp_data;
-              
+
               if (mem_cur_row >= num_rows) {
                   mem_cur_row = 0;
               }
-              
+
               fetch_result = av_fetch(rra_cdp_data_array, mem_cur_row, 0);
               row_cdp_data = (AV *)SvRV(*fetch_result);
 
@@ -894,12 +894,12 @@ _save_file(HV *self, char *filename)
                   fetch_result = av_fetch(row_cdp_data, iii, 0);
                   row_buf[iii] = SvNV(*fetch_result);
               }
-              
+
               fwrite(row_buf, sizeof(rrd_value_t), n_ds, fh);
               mem_cur_row++;
           }
       }
-      
+
       /* lets see if we had an error */
       if (ferror(fh)) {
           local_rrd_free(rrd);

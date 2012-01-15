@@ -1,6 +1,6 @@
 #!perl -T
 
-use Test::More tests => 16;
+use Test::More tests => 18;
 
 use File::Temp qw/tmpnam/;
 use RRDs;
@@ -116,8 +116,8 @@ $rrd->save_file($filename2);
 diag("Saved $filename2");
 
 
-# ok((unlink $filename1), "unlink $filename1");
-# ok((unlink $filename2), "unlink $filename2");
+ok((unlink $filename1), "unlink $filename1");
+ok((unlink $filename2), "unlink $filename2");
 
 
 
@@ -131,5 +131,3 @@ diag("Saved $filename2");
 # cperl-brace-offset: 0
 # cperl-label-offset: -2
 # End:
-                 
-
