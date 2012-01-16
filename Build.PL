@@ -9,6 +9,8 @@ my $builder = Module::Build->new(
     dist_version_from   => 'lib/RRD/Tweak.pm',
     build_requires => {
         'Test::More' => 0,
+        'Data::Compare' => 0,
+        'Data::Dumper' => 0,
         'ExtUtils::CBuilder' => 0,
         'RRDs' => 0,
     },

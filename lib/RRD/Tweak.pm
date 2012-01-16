@@ -223,7 +223,7 @@ sub validate {
     }
 
     # validate RRA definitions
-    
+
     for( my $rra=0; $rra < $n_rra; $rra++) {
         my $r = $self->{'rra'}[$rra];
 
@@ -255,13 +255,13 @@ sub validate {
                                ']{pdp_per_row} is not a positive integer');
             return 0;
         }
-        
+
         if( ref($r->{'cdp_prep_defaults'}) ne 'HASH' ) {
             $self->_set_errmsg('$self->{rra}[' . $rra .
                                ']{cdp_prep_defaults} is undefined');
             return 0;
         }
-            
+
         foreach my $key (@{$cf_names_and_rra_attributes{$cf}}) {
             if( not defined($r->{$key}) ) {
                 $self->_set_errmsg('$self->{rra}[' . $rra . ']{' . $key .
@@ -284,7 +284,7 @@ sub validate {
                            scalar(@{$self->{'cdp_data'}}));
         return 0;
     }
-    
+
     # validate cdp_prep
     for( my $rra=0; $rra < $n_rra; $rra++) {
 
@@ -418,6 +418,8 @@ sub load_file {
     my $self = shift;
     my $filename = shift;
 
+    croak('load_file() requires a filename') unless defined($filename);
+
     # the native method is defined in Tweak.xs and uses librrd methods
     $self->_load_file($filename);
 
@@ -452,6 +454,8 @@ the file already exists, it's truncated and overwritten.
 sub save_file {
     my $self = shift;
     my $filename = shift;
+
+    croak('save_file() requires a filename') unless defined($filename);
 
     if( not $self->validate() ) {
         croak('Cannot run save_file because RRD::Tweak object is invalid: '  .
@@ -526,9 +530,11 @@ from epoch (default is "time() - 10"); C<ds> pointing to an array that
 defines the datasources; C<rra> pointing to an array with RRA
 definitions.
 
+C<start> and C<lastupdate> are synonyms.
+
 Each datasource definition is a hash with the following arguments:
-C<name>, C<type>, C<heartbeat>, C<min> (default: "-nan"), C<max>
-(default: "-nan"). The COMPUTE datasource type is currently not supported.
+C<name>, C<type>, C<heartbeat>, C<min> (default: "nan"), C<max>
+(default: "nan"). The COMPUTE datasource type is currently not supported.
 
 Each RRA definition is a hash with arguments: C<cf> defines the
 consolidation function; C<steps> defines how many minimal steps are
@@ -583,6 +589,13 @@ sub create {
     $self->{'pdp_step'} = $pdp_step;
 
     my $last_up = $arg->{'start'};
+    if( not defined($last_up) ) {
+        $last_up = $arg->{'lastupdate'};
+    }
+    elsif( defined($arg->{'lastupdate'}) ) {
+        croak('create(): both "start" and "lastupdate" are defined');
+    }
+
     $last_up = (time() - 10) unless defined($last_up);
     $self->{'last_up'} = $last_up;
 
@@ -598,7 +611,7 @@ sub create {
             croak('create(): $arg->{ds}[' . $ds .
                   '] is not a HASH');
         }
-        
+
         $self->add_ds($r);
     }
 
@@ -612,7 +625,7 @@ sub create {
 
         $self->add_rra($r);
     }
-    
+
     $self->_set_empty(0);
     return;
 }
@@ -628,31 +641,31 @@ sub _default_cdp_prep_attrinutes {
     my $rra = shift;
 
     my $cf = $self->{'rra'}[$rra]->{'cf'};
-    
+
     my $cdp_prep_attr = {};
-    
+
     if( grep {$cf eq $_} qw/AVERAGE MIN MAX LAST/ ) {
         my $pdp_step = $self->{'pdp_step'};
         my $last_up = $self->{'last_up'};
         my $pdp_per_row = $self->{'rra'}[$rra]->{'pdp_per_row'};
         my $unknown_sec = $last_up % $pdp_step;
-        
-        $cdp_prep_attr->{'value'} = '-nan';
+
+        $cdp_prep_attr->{'value'} = 'nan';
         $cdp_prep_attr->{'unknown_datapoints'} =
             (($last_up - $unknown_sec) % ($pdp_step * $pdp_per_row)) /
                 $pdp_step;
     }
     elsif( grep {$cf eq $_} qw/HWPREDICT MHWPREDICT/ ) {
-        $cdp_prep_attr->{'intercept'} = '-nan';
-        $cdp_prep_attr->{'last_intercept'} = '-nan';
-        $cdp_prep_attr->{'slope'} = '-nan';
-        $cdp_prep_attr->{'last_slope'} = '-nan';
+        $cdp_prep_attr->{'intercept'} = 'nan';
+        $cdp_prep_attr->{'last_intercept'} = 'nan';
+        $cdp_prep_attr->{'slope'} = 'nan';
+        $cdp_prep_attr->{'last_slope'} = 'nan';
         $cdp_prep_attr->{'null_count'} = 1;
         $cdp_prep_attr->{'last_null_count'} = 1;
     }
     elsif( grep {$cf eq $_} qw/SEASONAL DEVSEASONAL/ ) {
-        $cdp_prep_attr->{'seasonal'} = '-nan';
-        $cdp_prep_attr->{'last_seasonal'} = '-nan';
+        $cdp_prep_attr->{'seasonal'} = 'nan';
+        $cdp_prep_attr->{'last_seasonal'} = 'nan';
         $cdp_prep_attr->{'init_flag'} = 1;
     }
     elsif( $cf eq 'FAILURES' ) {
@@ -708,18 +721,18 @@ sub add_ds {
         if( not defined($arg->{$key}) ) {
             croak('add_ds(): $arg->{' . $key . '} is undefined');
         }
-        
+
         if( $arg->{$key} eq '' ) {
             croak('add_ds(): $arg->{' . $key . '} is empty');
         }
-        
+
         $ds_attr->{$key} = $arg->{$key};
     }
-    
+
     if( length($arg->{'name'}) > 19 ) {
         croak('add_ds(): $arg->{name} is too long: "' . $arg->{'name'} . '"');
     }
-    
+
     if( $arg->{'name'} !~ /^[0-9a-zA-Z_-]+$/o ) {
         croak('add_ds(): $arg->{name} has invalid characters: "' .
               $arg->{'name'} . '"');
@@ -732,12 +745,12 @@ sub add_ds {
                   '" already exists in this RRD::Tweak object');
         }
     }
-    
+
     if( not $ds_types{$arg->{'type'}} ) {
         croak('add_ds(): $arg->{type} has invalid value: "' .
               $arg->{'type'} . '"');
     }
-    
+
     if( $arg->{'type'} eq 'COMPUTE' ) {
         croak('add_ds(): DS type COMPUTE is currently unsupported');
     }
@@ -747,18 +760,18 @@ sub add_ds {
             croak('add_ds(): $arg->{heartbeat} is undefined');
         }
         $ds_attr->{'hb'} = int($hb);
-        
+
         foreach my $key ('min', 'max') {
             my $val = $arg->{$key};
             if( defined($val) ) {
                 if( $val eq 'U' ) {
-                    $val = '-nan';
+                    $val = 'nan';
                     }
             }
             else {
-                $val = '-nan';
+                $val = 'nan';
             }
-            
+
             $ds_attr->{$key} = $val;
         }
     }
@@ -772,7 +785,7 @@ sub add_ds {
     push(@{$self->{'ds'}}, $ds_attr);
 
     # update cdp_prep
-    
+
     my $n_rra = scalar(@{$self->{'rra'}});
     for( my $rra=0; $rra < $n_rra; $rra++) {
         my $cdp_prep_attr = $self->{'rra'}[$rra]->{'cdp_prep_defaults'};
@@ -780,7 +793,7 @@ sub add_ds {
             croak('add_ds(): $self->{rra}[' . $rra .
                   ']->{cdp_prep_defaults} is undefined');
         }
-        
+
         # duplicate cdp_prep attributes for the new DS
         my $attr = {};
         while(my($key, $value) = each %{$cdp_prep_attr}) {
@@ -792,7 +805,7 @@ sub add_ds {
         if( not defined($self->{'cdp_prep'}[$rra]) ) {
             $self->{'cdp_prep'}[$rra] = [];
         }
-        
+
         push(@{$self->{'cdp_prep'}[$rra]}, $attr);
     }
 
@@ -800,9 +813,9 @@ sub add_ds {
     for( my $rra=0; $rra < $n_rra; $rra++) {
         my $rra_data = $self->{'cdp_data'}[$rra];
         my $rra_len = scalar(@{$rra_data});
-        
+
         for( my $row=0; $row < $rra_len; $row++ ) {
-            push(@{$rra_data->[$row]}, '-nan');
+            push(@{$rra_data->[$row]}, 'nan');
         }
     }
 
@@ -833,7 +846,7 @@ it. The data can be initialized by create() or load_file().
 sub add_rra {
     my $self = shift;
     my $arg = shift;
-    
+
     if( ref($arg) ne 'HASH' ) {
         croak('add_rra() requies a hashref as argument');
     }
@@ -846,17 +859,17 @@ sub add_rra {
     }
 
     my $rradef_attr = {};
-    
+
     my $cf = $arg->{cf};
     if( not defined($cf) ) {
         croak('add_rra(): $arg->{cf} is undefined');
     }
-    
+
     if( not defined($cf_names_and_rra_attributes{$cf}) ) {
         $self->_set_errmsg('add_rra(): Unknown CF name in ' . '$arg->{cf}');
     }
     $rradef_attr->{'cf'} = $cf;
-    
+
     my $pdp_per_row = $arg->{'steps'};
     if( not defined($pdp_per_row) or int($pdp_per_row) <= 0 ) {
         croak('add_rra(): $arg->{steps} is not a positive integer');
@@ -872,45 +885,45 @@ sub add_rra {
                   ' and steps=' . $pdp_per_row . ' already exists');
         }
     }
-    
+
     my $rra_len = $arg->{'rows'};
     if( not defined($rra_len) or int($rra_len) <= 0 ) {
         croak('add_rra(): $arg->{rows} is not a positive integer');
     }
-    
+
     foreach my $key (@{$cf_names_and_rra_attributes{$cf}}) {
         if( not defined($arg->{$key}) ) {
             croak('add_rra(): $arg->{' . $key . '} is undefined');
         }
         $rradef_attr->{$key} = $arg->{$key};
     }
-    
+
     my $new_rra = $n_rra;
     push(@{$self->{'rra'}}, $rradef_attr);
-   
+
     # update cdp_data
-    
+
     my $n_ds = scalar(@{$self->{'ds'}});
     my $rra_data = [];
     for( my $row=0; $row < $rra_len; $row++ ) {
         my $row_data = [];
         for( my $ds=0; $ds < $n_ds; $ds++ ) {
-            push(@{$row_data}, '-nan');
+            push(@{$row_data}, 'nan');
         }
         push(@{$rra_data}, $row_data);
     }
-    
+
     push(@{$self->{'cdp_data'}}, $rra_data);
 
     # populate cdp_prep_defaults for the newly created RRA
-    
+
     $self->_default_cdp_prep_attrinutes($new_rra);
 
     # create cdp_prep entries
-    
+
     my $cdp_prep_attr = $self->{'rra'}[$new_rra]->{'cdp_prep_defaults'};
     my $rra_cdp_prep = [];
-    
+
     for( my $ds=0; $ds < $n_ds; $ds++ ) {
         my $attr = {};
         while(my($key, $value) = each %{$cdp_prep_attr}) {
@@ -920,16 +933,81 @@ sub add_rra {
     }
 
     push(@{$self->{'cdp_prep'}}, $rra_cdp_prep);
-    
+
     return;
 }
-        
-    
-    
 
-                
 
-    
+
+
+=head2 info
+
+ my $result = $rrd->info();
+
+The method returns a hash reference with all available information as
+described for the create() method. It always returns a "lastupdate"
+value in the returned attributes.
+
+=cut
+
+sub info {
+    my $self = shift;
+
+    my $ret ={ 'step' => $self->{'pdp_step'},
+               'lastupdate' => $self->{'last_up'} };
+
+    my $ds_info = [];
+    my $n_ds = scalar(@{$self->{'ds'}});
+
+    for( my $ds=0; $ds < $n_ds; $ds++ ) {
+
+        my $ds_attr = $self->{'ds'}[$ds];
+        my $r = {};
+
+        foreach my $key ('name', 'type') {
+            $r->{$key} = $ds_attr->{$key};
+        }
+
+        if( $r->{'type'} ne 'COMPUTE' ) {
+            $r->{'heartbeat'} = $ds_attr->{'hb'};
+            foreach my $key ('min', 'max') {
+                $r->{$key} = $ds_attr->{$key};
+            }
+        }
+        else {
+            $r->{'rpn'} = $ds_attr->{'rpn'};
+        }
+
+        push(@{$ds_info}, $r);
+    }
+
+    $ret->{'ds'} = $ds_info;
+
+    my $rra_info = [];
+    my $n_rra = scalar(@{$self->{'rra'}});
+    for( my $rra=0; $rra < $n_rra; $rra++) {
+
+        my $rra_attr = $self->{'rra'}[$rra];
+        my $r = {};
+
+        $r->{'cf'} = $rra_attr->{'cf'};
+        $r->{'steps'} = $rra_attr->{'pdp_per_row'};
+        $r->{'rows'} = scalar(@{$self->{'cdp_data'}[$rra]});
+
+        foreach my $key (@{$cf_names_and_rra_attributes{$r->{'cf'}}}) {
+            $r->{$key} = $rra_attr->{$key};
+        }
+
+        push(@{$rra_info}, $r);
+    }
+
+    $ret->{'rra'} = $rra_info;
+
+    return $ret;
+}
+
+
+
 
 
 

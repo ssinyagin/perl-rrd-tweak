@@ -1,10 +1,10 @@
+#!perl -T
 
-####!perl -T
-
-use Test::More tests => 4;
+use Test::More tests => 9;
 
 use File::Temp qw/tmpnam/;
 use RRDs;
+use Data::Compare;
 use Data::Dumper;
 
 BEGIN {
@@ -16,10 +16,10 @@ diag("Testing RRD::Tweak $RRD::Tweak::VERSION, Perl $], $^X");
 
 my $filename1 = tmpnam();
 
-my $rrd = RRD::Tweak->new();
-ok((defined($rrd)), "RRD::Tweak->new()");
+my $rrd1 = RRD::Tweak->new();
+ok((defined($rrd1)), "RRD::Tweak->new()");
 
-$rrd->create({step => 300,
+$rrd1->create({step => 300,
               start => time(),
               ds => [{name => 'InOctets',
                       type=> 'COUNTER',
@@ -48,9 +48,30 @@ $rrd->create({step => 300,
 diag("created RRD::Tweak with new RRD data");
 
 diag("Saving $filename1");
-$rrd->save_file($filename1);
+$rrd1->save_file($filename1);
 ok(not $@);
 diag("Saved $filename1");
+
+my $rrd1_info = $rrd1->info();
+ok((ref($rrd1_info) eq 'HASH'), '$rrd1->info() returned a hashref');
+
+my $rrd2 = RRD::Tweak->new();
+ok((defined($rrd2)), "RRD::Tweak->new()");
+
+eval { $rrd2->load_file($filename1) };
+ok((not $@), '$rrd2->load_file($filename1)') or
+    BAIL_OUT("load_file failed: " . $@);
+
+my $rrd2_info = $rrd2->info();
+ok((ref($rrd2_info) eq 'HASH'), '$rrd2->info() returned a hashref');
+
+if( not ok(Compare($rrd1_info, $rrd2_info),
+           'Compare($rrd1_info, $rrd2_info)') ) {
+    diag(Dumper($rrd1_info));
+    diag(Dumper($rrd2_info));
+}
+
+# print Dumper($rrd2->{cdp_data});
 
 ok((unlink $filename1), "unlink $filename1");
 
