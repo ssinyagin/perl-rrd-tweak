@@ -80,7 +80,7 @@ returns a human-readable explanation of the failure.
 =cut
 
 # DS types supported
-my %ds_types =
+my %valid_ds_types =
     ('GAUGE' => 1,
      'COUNTER' => 1,
      'DERIVE' => 1,
@@ -182,7 +182,7 @@ sub validate {
         }
 
         # check if the type is valid
-        if( not $ds_types{$r->{'type'}} ) {
+        if( not $valid_ds_types{$r->{'type'}} ) {
             $self->_set_errmsg('$self->{ds}[' . $ds .
                                ']{type} has invalid value: "' . $r->{'type'} .
                                '"');
@@ -206,7 +206,7 @@ sub validate {
                 return 0;
             }
 
-            if( $r->{$key} !~ /nan$/i and
+            if( $r->{$key} !~ /^-?nan$/i and
                 $r->{$key} !~ /^[0-9e+\-.]+$/i ) {
                 $self->_set_errmsg('$self->{ds}[' . $ds .
                                    ']{' . $key . '} is not a number');
@@ -682,6 +682,36 @@ sub _default_cdp_prep_attrinutes {
 }
 
 
+sub _validate_ds_name {
+    my $self = shift;
+    my $ds_name = shift;
+    
+    if( length($ds_name) > 19 ) {
+        croak('DS name is too long: "' . $ds_name . '"');
+    }
+
+    if( $ds_name !~ /^[0-9a-zA-Z_-]+$/o ) {
+        croak('DS has invalid characters: "' . $ds_name . '"');
+    }
+    return;
+}
+
+
+# check name uniqueness
+sub _check_unique_ds_name {
+    my $self = shift;
+    my $ds_name = shift;
+    
+    foreach my $ds_def (@{$self->{'ds'}}) {
+        if( $ds_name eq $ds_def->{'name'} ) {
+            croak('A DS named "' . $ds_name .
+                  '" already exists in this RRD::Tweak object');
+        }
+    }
+    return;
+}
+
+
 
 =head2 add_ds
 
@@ -729,24 +759,10 @@ sub add_ds {
         $ds_attr->{$key} = $arg->{$key};
     }
 
-    if( length($arg->{'name'}) > 19 ) {
-        croak('add_ds(): $arg->{name} is too long: "' . $arg->{'name'} . '"');
-    }
-
-    if( $arg->{'name'} !~ /^[0-9a-zA-Z_-]+$/o ) {
-        croak('add_ds(): $arg->{name} has invalid characters: "' .
-              $arg->{'name'} . '"');
-    }
-
-    # check name uniqueness
-    foreach my $ds_def (@{$self->{'ds'}}) {
-        if( $arg->{'name'} eq $ds_def->{'name'} ) {
-            croak('add_ds(): a datasource named "' . $arg->{'name'} .
-                  '" already exists in this RRD::Tweak object');
-        }
-    }
-
-    if( not $ds_types{$arg->{'type'}} ) {
+    $self->_validate_ds_name($arg->{'name'});
+    $self->_check_unique_ds_name($arg->{'name'});
+    
+    if( not $valid_ds_types{$arg->{'type'}} ) {
         croak('add_ds(): $arg->{type} has invalid value: "' .
               $arg->{'type'} . '"');
     }
@@ -766,7 +782,7 @@ sub add_ds {
             if( defined($val) ) {
                 if( $val eq 'U' ) {
                     $val = 'nan';
-                    }
+                }
             }
             else {
                 $val = 'nan';
@@ -865,6 +881,88 @@ sub del_ds {
 }
 
 
+
+=head2 modify_ds
+
+ $rrd->modify_ds($ds_index, {heartbeat => 700});
+
+The method takes the DS index and a hash reference with DS parameters
+that need to be modified. All DS parameters described for the create()
+method are supported.
+
+=cut
+
+sub modify_ds {
+    my $self = shift;
+    my $mod_ds_index = shift;
+    my $arg = shift;
+
+    my $n_ds = scalar(@{$self->{'ds'}});
+    
+    if( $mod_ds_index < 0 or $mod_ds_index >= $n_ds ) {
+        croak('modify_ds(): DS index is outside of allowed range: ' .
+              $mod_ds_index);
+    }
+    
+    my $ds_attr = $self->{'ds'}[$mod_ds_index];
+    
+    if( exists $arg->{'name'} and
+        $arg->{'name'} ne $ds_attr->{'name'} )
+    {
+        $self->_validate_ds_name($arg->{'name'});
+        $self->_check_unique_ds_name($arg->{'name'});
+        $ds_attr->{'name'} = $arg->{'name'};
+    }
+
+    if( exists($arg->{'type'}) and
+        $arg->{'type'} ne $ds_attr->{'type'} )
+    {
+        if( not $valid_ds_types{$arg->{'type'}} ) {
+            croak('modify_ds(): $arg->{type} has invalid value: "' .
+                  $arg->{'type'} . '"');
+        }
+        
+        if( $arg->{'type'} eq 'COMPUTE' ) {
+            croak('modify_ds(): DS type COMPUTE is currently unsupported');
+        }
+        
+        $ds_attr->{'type'} = $arg->{'type'};
+    }
+
+    # when we start supporting COMPUTE datasources, need also to process
+    # the type changing more correctly: a new type may require new
+    # attributes.
+    
+    if( $ds_attr->{'type'} ne 'COMPUTE' ) {
+        
+        if( exists($arg->{'heartbeat'}) and
+            int($arg->{'heartbeat'}) != $ds_attr->{'hb'} ) {
+            $ds_attr->{'hb'} = int($arg->{'heartbeat'});
+        }
+        
+        foreach my $key ('min', 'max') {
+            my $val = $arg->{$key};
+            if( defined($val) ) {
+                if( $val eq 'U' ) {
+                    $val = 'nan';
+                }
+                
+                if( $val =~ /^-?nan$/i ) {
+                    if( $ds_attr->{$key} !~ /^-?nan$/i ) {
+                        $ds_attr->{$key} = 'nan';
+                    }
+                }
+                elsif( $val != $ds_attr->{$key} ) {
+                    $ds_attr->{$key} = $val;
+                }
+            }
+        }
+    }
+}
+
+
+        
+        
 
 
 
