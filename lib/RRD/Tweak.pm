@@ -824,6 +824,50 @@ sub add_ds {
 
 
 
+
+=head2 del_ds
+
+ $rrd->del_ds($ds_index);
+
+The method removes a datasource from a given index. The indexing starts
+from 0.
+
+=cut
+
+sub del_ds {
+    my $self = shift;
+    my $del_ds_index = shift;
+
+    my $n_ds = scalar(@{$self->{'ds'}});
+
+    if( $del_ds_index < 0 or $del_ds_index >= $n_ds ) {
+        croak('del_ds(): DS index is outside of allowed range: ' .
+              $del_ds_index);
+    }
+    
+    splice(@{$self->{'ds'}}, $del_ds_index, 1);
+    
+    # update cdp_prep and cdp_data
+    my $n_rra = scalar(@{$self->{'rra'}});
+    for( my $rra=0; $rra < $n_rra; $rra++) {
+        
+        splice(@{$self->{'cdp_prep'}[$rra]}, $del_ds_index, 1);
+
+        my $rra_data = $self->{'cdp_data'}[$rra];
+        my $rra_len = scalar(@{$rra_data});
+        
+        for( my $row=0; $row < $rra_len; $row++ ) {
+            splice(@{$rra_data->[$row]}, $del_ds_index, 1);
+        }
+    }
+    
+    return;
+}
+
+
+
+
+
 =head2 add_rra
 
  $rrd->add_rra({cf => 'AVERAGE',
@@ -938,6 +982,33 @@ sub add_rra {
 }
 
 
+
+=head2 del_rra
+
+ $rrd->del_rra($rra_index);
+
+The method removes a round-robin arrat from a given index. The indexing
+starts from 0.
+
+=cut
+
+sub del_rra {
+    my $self = shift;
+    my $del_rra_index = shift;
+    
+    my $n_rra = scalar(@{$self->{'rra'}});
+
+    if( $del_rra_index < 0 or $del_rra_index >= $n_rra ) {
+        croak('del_rra(): RRA index is outside of allowed range: ' .
+              $del_rra_index);
+    }
+
+    splice(@{$self->{'rra'}}, $del_rra_index, 1);
+    splice(@{$self->{'cdp_prep'}}, $del_rra_index, 1);
+    splice(@{$self->{'cdp_data'}}, $del_rra_index, 1);
+}
+    
+    
 
 
 =head2 info
