@@ -428,7 +428,7 @@ sub load_file {
     # populate $self->{'rra'}[$rra]->{'cdp_prep_defaults'}
     my $n_rra = scalar(@{$self->{'rra'}});
     for( my $rra=0; $rra < $n_rra; $rra++) {
-        $self->_default_cdp_prep_attrinutes($rra);
+        $self->_default_cdp_prep_attributes($rra);
     }
 
     if( not $self->validate() ) {
@@ -636,7 +636,7 @@ sub create {
 # populates $self->{'rra'}[$rra]->{'cdp_prep_defaults'}
 # see details in rrd_create.c
 
-sub _default_cdp_prep_attrinutes {
+sub _default_cdp_prep_attributes {
     my $self = shift;
     my $rra = shift;
 
@@ -1059,7 +1059,7 @@ sub add_rra {
 
     # populate cdp_prep_defaults for the newly created RRA
 
-    $self->_default_cdp_prep_attrinutes($new_rra);
+    $self->_default_cdp_prep_attributes($new_rra);
 
     # create cdp_prep entries
 
