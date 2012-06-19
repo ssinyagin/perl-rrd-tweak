@@ -52,17 +52,17 @@ eval { $rrd1->add_ds({name => 'InOctets',
 ok($@, "add_ds with duplicate name") or
     BAIL_OUT('added a DS with duplicate name, but did not get an error');
 
-ok($rrd1->validate(), "validate()");
+ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
 
 $rrd1->add_ds({name => 'InErrors',
                type=> 'COUNTER',
                heartbeat => 755});
 
-ok($rrd1->validate(), "validate()");
+ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
 
 $rrd1->del_ds(1);
 
-ok($rrd1->validate(), "validate()");
+ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
 
 my $rrd1_info = $rrd1->info();
 
@@ -87,11 +87,11 @@ $rrd1->add_rra({cf => 'MIN',
                 steps => 288,
                 rows => 768});
 
-ok($rrd1->validate(), "validate()");
+ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
 
 $rrd1->del_rra(1);
 
-ok($rrd1->validate(), "validate()");
+ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
 
 $rrd1_info = $rrd1->info();
 

@@ -1138,6 +1138,8 @@ NaN.
 If the number of rows is decreasing, the oldest data elements are
 discarded.
 
+=back
+
 =cut
 
 sub modify_rra {
