@@ -1,6 +1,6 @@
 #!perl -T
 
-use Test::More tests => 13;
+use Test::More tests => 12;
 
 use File::Temp qw/tmpnam/;
 use RRDs;
@@ -46,62 +46,36 @@ $rrd1->create({step => 300,
 diag("created RRD::Tweak with new RRD data");
 
 # check the edge case: duplicate DS name
-eval { $rrd1->add_ds({name => 'InOctets',
-                      type=> 'COUNTER',
-                      heartbeat => 600}) };
-ok($@, "add_ds with duplicate name") or
-    BAIL_OUT('added a DS with duplicate name, but did not get an error');
+eval { $rrd1->modify_ds(1, {name => 'InOctets'}) };
+ok($@, "modify_ds with duplicate name") or
+    BAIL_OUT('modified a DS with duplicate name, but did not get an error');
 
 ok($rrd1->validate(), "validate()");
 
-$rrd1->add_ds({name => 'InErrors',
-               type=> 'COUNTER',
-               heartbeat => 755});
-
+$rrd1->modify_ds(1, {name => 'XXX'});
 ok($rrd1->validate(), "validate()");
-
-$rrd1->del_ds(1);
-
-ok($rrd1->validate(), "validate()");
-
 my $rrd1_info = $rrd1->info();
+ok(($rrd1_info->{ds}[1]{name} eq 'XXX'), "modify_ds changing name");
 
-ok((scalar(@{$rrd1_info->{ds}}) == 3),
-   'after adding and deleting DS, should get 3 datasources');
-
-
-ok(($rrd1_info->{ds}[2]{heartbeat} == 755),
-    '$rrd1_info->{ds}[2]{heartbeat}) == 755');
-
-
-# check the edge case: duplicate RRA
-eval { $rrd1->add_rra({cf => 'MAX',
-                       xff => 0.77,
-                       steps => 12,
-                       rows => 1010}) };
-ok($@, "add_rra with duplicate RRA") or
-    BAIL_OUT('added RRA with duplicate CF and steps, but did not get an error');
-
-$rrd1->add_rra({cf => 'MIN',
-                xff => 0.3,
-                steps => 288,
-                rows => 768});
+# edge case: invalid type
+eval { $rrd1->modify_ds(1, {type => 'GAG'}) };
+ok($@, "modify_ds with invalid type") or
+    BAIL_OUT('modified a DS with invalid type, but did not get an error');
 
 ok($rrd1->validate(), "validate()");
 
-$rrd1->del_rra(1);
-
+$rrd1->modify_ds(1, {type => 'GAUGE'});
 ok($rrd1->validate(), "validate()");
-
 $rrd1_info = $rrd1->info();
-
-ok((scalar(@{$rrd1_info->{rra}}) == 3),
-   'after adding a deleting RRA, should get 3 RRAs');
+ok(($rrd1_info->{ds}[1]{type} eq 'GAUGE'), "modify_ds changing type");
 
 
-ok(($rrd1_info->{rra}[2]{steps} == 288),
-   '$rrd1_info->{rra}[2]{steps} == 288');
+$rrd1->modify_ds(2, {max => 1000});
+ok($rrd1->validate(), "validate()");
+$rrd1_info = $rrd1->info();
+ok(($rrd1_info->{ds}[2]{max} == 1000), "modify_ds changing max");
 
+    
 
 
 # Local Variables:
