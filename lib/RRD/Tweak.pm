@@ -1085,7 +1085,7 @@ sub add_rra {
 
  $rrd->del_rra($rra_index);
 
-The method removes a round-robin arrat from a given index. The indexing
+The method removes a round-robin array from a given index. The indexing
 starts from 0.
 
 =cut
