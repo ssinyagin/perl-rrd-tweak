@@ -10,6 +10,13 @@ use base 'DynaLoader';
 our $VERSION = '0.01';
 bootstrap RRD::Tweak;
 
+# Internal object structure:
+# $self->{ds} is array of DS definitions
+# $self->{rra} is array of RRA definitions
+# $self->{cdp_prep}[$rra][$ds] is a hash of intermediate data
+# $self->{cdp_data}[$rra][$row][$ds] is a data element
+#  (last row corresponds to the newest data)
+
 =head1 NAME
 
 RRD::Tweak - RRD file manipulation
@@ -1106,7 +1113,101 @@ sub del_rra {
     splice(@{$self->{'cdp_data'}}, $del_rra_index, 1);
 }
     
+
     
+=head2 modify_rra
+
+ $rrd->modify_rra($rra_index, {xff => 0.40});
+
+The method takes the RRA index and a hash reference with RRA parameters
+that need to be modified. The following parameters are supported:
+
+=over 4
+
+=item * xff
+
+Modifying of XFF does not change any data in the array, and only affects
+future updates.
+
+=item * rows
+
+If the number of rows is increasing, the existing data stays intact, and
+the new data elements which fall into the extended time range are set to
+NaN.
+
+If the number of rows is decreasing, the oldest data elements are
+discarded.
+
+=cut
+
+sub modify_rra {
+    my $self = shift;
+    my $mod_rra_index = shift;
+    my $arg = shift;
+
+    my $n_rra = scalar(@{$self->{'rra'}});
+
+    if( $mod_rra_index < 0 or $mod_rra_index >= $n_rra ) {
+        croak('modify_rra(): RRA index is outside of allowed range: ' .
+              $mod_rra_index);
+    }
+
+    my $r = $self->{'rra'}[$mod_rra_index];
+    my $cf = $r->{cf};
+    
+    if( exists $arg->{'xff'} ) {
+        if( not exists $r->{'xff'} )
+        {
+            croak('modify_rra(): the RRA ' . $mod_rra_index . ' has CF: ' .
+                  $cf . ' and it does not support xff attribute');
+        }
+        
+        if( $arg->{'xff'} != $r->{'xff'} )
+        {
+            $r->{'xff'} = $arg->{'xff'};
+        }
+    }
+
+    if( exists $arg->{'rows'} ) {
+        if( int($arg->{'rows'}) <= 0 ) {
+            croak('modify_rra(): $arg->{rows} is not a positive integer');
+        }
+        
+        my $rra_data = $self->{'cdp_data'}[$mod_rra_index];
+        my $rra_len = scalar(@{$rra_data});
+
+        if( $arg->{'rows'} < $rra_len ) {
+            
+            # shrink the RRA: remove the array head
+            splice(@{$rra_data}, 0, ($arg->{'rows'} - $rra_len));
+        }
+        elsif( $arg->{'rows'} > $rra_len ) {
+            
+            # grow the RRA: add NAN values at the head
+            
+            my $rows_to_add = $arg->{'rows'} - $rra_len;
+            my $n_ds = scalar(@{$self->{'ds'}});
+            my $prepend_rra_data = [];
+            
+            for( my $i=0; $i < $rows_to_add; $i++ ) {
+                my $row_data = [];
+                for( my $ds=0; $ds < $n_ds; $ds++ ) {
+                    push(@{$row_data}, 'nan');
+                }
+                push(@{$prepend_rra_data}, $row_data);
+            }
+
+            unshift(@{$rra_data}, @{$prepend_rra_data});
+        }
+    }
+}
+                
+            
+            
+
+    
+        
+
 
 
 =head2 info
