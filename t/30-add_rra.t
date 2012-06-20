@@ -1,6 +1,6 @@
 #!perl -T
 
-use Test::More tests => 11;
+use Test::More tests => 10;
 
 use File::Temp qw/tmpnam/;
 use RRDs;
@@ -54,6 +54,11 @@ RRDs::update($filename1,
              '1326590400:600:700',
              '1326590700:600:700',
              '1326591000:600:700',
+             '1326591300:600:700',
+             '1326591600:600:700',
+             '1326591900:600:700',
+             '1326592200:600:700',
+             '1326592500:600:700',
             );
 
 $err = RRDs::error();
@@ -66,7 +71,16 @@ my $rrd1 = RRD::Tweak->new();
 $rrd1->load_file($filename1);
 ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
 
-$rrd1->modify_rra(6, {rows => 3000});
+$rrd1->add_rra({cf => 'AVERAGE',
+                xff => 0.25,
+                steps => 6,
+                rows => 5});
+
+$rrd1->add_rra({cf => 'MIN',
+                xff => 0.25,
+                steps => 6,
+                rows => 5});
+
 
 $rrd1->save_file($filename2);
 diag("Saved $filename2");
@@ -79,17 +93,15 @@ my $rrd2 = RRD::Tweak->new();
 $rrd2->load_file($filename2);
 ok($rrd2->validate(), "validate()") or diag($rrd2->errmsg());
 
-ok($rrd1->{cdp_data}[6][2400-1][0] == 300);
-ok($rrd2->{cdp_data}[6][3000-1][0] == 300);
+#diag(Dumper($rrd2->{cdp_data}[9]));
+#diag(Dumper($rrd2->{cdp_data}[10]));
+
+ok($rrd2->{cdp_data}[9][1][0] == 480);
+ok($rrd2->{cdp_data}[10][3][0] == 300);
 
 ok((unlink $filename1), "unlink $filename1");
 ok((unlink $filename2), "unlink $filename2");
 
-$rrd2->modify_rra(6, {xff => 0.75});
-my $rrd2_info = $rrd2->info();
-
-ok(($rrd2_info->{rra}[6]{xff} == 0.75), "xff==0.75") or
-    diag("xff: " . $rrd2_info->{rra}[6]{xff});
 
 
 

@@ -1114,7 +1114,7 @@ sub add_rra {
                     my $src_data = $self->{'cdp_data'}[$rra];
                     my $src_len = scalar(@{$src_data});
 
-                    if( $row_start_time < (-1) * $src_len * $src_steps ) {
+                    if( $row_start_time + $src_len * $src_steps < 0 ) {
                         # our new row is outside of the array boundaries
                         next;
                     }
@@ -1127,8 +1127,8 @@ sub add_rra {
                     }
 
                     # grab the values from source rows
-                    my @known_values;
-                    my @unknown_values;
+                    my @known_values = ();
+                    my @unknown_values = ();
                     my $start_src_row = int($src_len +
                                             $row_start_time/$src_steps);
                     for( my $ds=0; $ds < $n_ds; $ds++ ) {
@@ -1140,7 +1140,7 @@ sub add_rra {
                              $src_row_pos++ ) {
                             my $src_row = $start_src_row + $src_row_pos;
                             my $data_element = $src_data->[$src_row][$ds];
-                            if( $data_element eq 'nan' ) {
+                            if( $data_element =~ /nan/io ) {
                                 $unknown_val_per_ds++;
                             }
                             else {
