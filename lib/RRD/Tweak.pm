@@ -692,7 +692,7 @@ sub _default_cdp_prep_attributes {
 sub _validate_ds_name {
     my $self = shift;
     my $ds_name = shift;
-    
+
     if( length($ds_name) > 19 ) {
         croak('DS name is too long: "' . $ds_name . '"');
     }
@@ -708,7 +708,7 @@ sub _validate_ds_name {
 sub _check_unique_ds_name {
     my $self = shift;
     my $ds_name = shift;
-    
+
     foreach my $ds_def (@{$self->{'ds'}}) {
         if( $ds_name eq $ds_def->{'name'} ) {
             croak('A DS named "' . $ds_name .
@@ -768,7 +768,7 @@ sub add_ds {
 
     $self->_validate_ds_name($arg->{'name'});
     $self->_check_unique_ds_name($arg->{'name'});
-    
+
     if( not $valid_ds_types{$arg->{'type'}} ) {
         croak('add_ds(): $arg->{type} has invalid value: "' .
               $arg->{'type'} . '"');
@@ -867,23 +867,23 @@ sub del_ds {
         croak('del_ds(): DS index is outside of allowed range: ' .
               $del_ds_index);
     }
-    
+
     splice(@{$self->{'ds'}}, $del_ds_index, 1);
-    
+
     # update cdp_prep and cdp_data
     my $n_rra = scalar(@{$self->{'rra'}});
     for( my $rra=0; $rra < $n_rra; $rra++) {
-        
+
         splice(@{$self->{'cdp_prep'}[$rra]}, $del_ds_index, 1);
 
         my $rra_data = $self->{'cdp_data'}[$rra];
         my $rra_len = scalar(@{$rra_data});
-        
+
         for( my $row=0; $row < $rra_len; $row++ ) {
             splice(@{$rra_data->[$row]}, $del_ds_index, 1);
         }
     }
-    
+
     return;
 }
 
@@ -905,14 +905,14 @@ sub modify_ds {
     my $arg = shift;
 
     my $n_ds = scalar(@{$self->{'ds'}});
-    
+
     if( $mod_ds_index < 0 or $mod_ds_index >= $n_ds ) {
         croak('modify_ds(): DS index is outside of allowed range: ' .
               $mod_ds_index);
     }
-    
+
     my $ds_attr = $self->{'ds'}[$mod_ds_index];
-    
+
     if( exists $arg->{'name'} and
         $arg->{'name'} ne $ds_attr->{'name'} )
     {
@@ -928,32 +928,32 @@ sub modify_ds {
             croak('modify_ds(): $arg->{type} has invalid value: "' .
                   $arg->{'type'} . '"');
         }
-        
+
         if( $arg->{'type'} eq 'COMPUTE' ) {
             croak('modify_ds(): DS type COMPUTE is currently unsupported');
         }
-        
+
         $ds_attr->{'type'} = $arg->{'type'};
     }
 
     # when we start supporting COMPUTE datasources, need also to process
     # the type changing more correctly: a new type may require new
     # attributes.
-    
+
     if( $ds_attr->{'type'} ne 'COMPUTE' ) {
-        
+
         if( exists($arg->{'heartbeat'}) and
             int($arg->{'heartbeat'}) != $ds_attr->{'hb'} ) {
             $ds_attr->{'hb'} = int($arg->{'heartbeat'});
         }
-        
+
         foreach my $key ('min', 'max') {
             my $val = $arg->{$key};
             if( defined($val) ) {
                 if( $val eq 'U' ) {
                     $val = 'nan';
                 }
-                
+
                 if( $val =~ /^-?nan$/i ) {
                     if( $ds_attr->{$key} !~ /^-?nan$/i ) {
                         $ds_attr->{$key} = 'nan';
@@ -968,8 +968,8 @@ sub modify_ds {
 }
 
 
-        
-        
+
+
 
 
 
@@ -1100,7 +1100,7 @@ starts from 0.
 sub del_rra {
     my $self = shift;
     my $del_rra_index = shift;
-    
+
     my $n_rra = scalar(@{$self->{'rra'}});
 
     if( $del_rra_index < 0 or $del_rra_index >= $n_rra ) {
@@ -1112,9 +1112,9 @@ sub del_rra {
     splice(@{$self->{'cdp_prep'}}, $del_rra_index, 1);
     splice(@{$self->{'cdp_data'}}, $del_rra_index, 1);
 }
-    
 
-    
+
+
 =head2 modify_rra
 
  $rrd->modify_rra($rra_index, {xff => 0.40});
@@ -1156,14 +1156,14 @@ sub modify_rra {
 
     my $r = $self->{'rra'}[$mod_rra_index];
     my $cf = $r->{cf};
-    
+
     if( exists $arg->{'xff'} ) {
         if( not exists $r->{'xff'} )
         {
             croak('modify_rra(): the RRA ' . $mod_rra_index . ' has CF: ' .
                   $cf . ' and it does not support xff attribute');
         }
-        
+
         if( $arg->{'xff'} != $r->{'xff'} )
         {
             $r->{'xff'} = $arg->{'xff'};
@@ -1174,23 +1174,23 @@ sub modify_rra {
         if( int($arg->{'rows'}) <= 0 ) {
             croak('modify_rra(): $arg->{rows} is not a positive integer');
         }
-        
+
         my $rra_data = $self->{'cdp_data'}[$mod_rra_index];
         my $rra_len = scalar(@{$rra_data});
 
         if( $arg->{'rows'} < $rra_len ) {
-            
+
             # shrink the RRA: remove the array head
             splice(@{$rra_data}, 0, ($arg->{'rows'} - $rra_len));
         }
         elsif( $arg->{'rows'} > $rra_len ) {
-            
+
             # grow the RRA: add NAN values at the head
-            
+
             my $rows_to_add = $arg->{'rows'} - $rra_len;
             my $n_ds = scalar(@{$self->{'ds'}});
             my $prepend_rra_data = [];
-            
+
             for( my $i=0; $i < $rows_to_add; $i++ ) {
                 my $row_data = [];
                 for( my $ds=0; $ds < $n_ds; $ds++ ) {
@@ -1203,12 +1203,12 @@ sub modify_rra {
         }
     }
 }
-                
-            
-            
 
-    
-        
+
+
+
+
+
 
 
 
