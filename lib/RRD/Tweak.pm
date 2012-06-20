@@ -1083,6 +1083,114 @@ sub add_rra {
 
     push(@{$self->{'cdp_prep'}}, $rra_cdp_prep);
 
+    # try to derive the data rows where possible ($n_rra holds the old
+    # number of arrays)
+    if( $n_rra > 0 ) {
+
+        my %rraidx_per_steps;
+        for( my $rra=0; $rra < $n_rra; $rra++) {
+            if( $self->{'rra'}[$rra]->{'cf'} eq $cf ) {
+                my $steps = $self->{'rra'}[$rra]->{'pdp_per_row'};
+                $rraidx_per_steps{$steps} = $rra;
+            }
+        }
+
+        if( scalar(keys %rraidx_per_steps) > 0 ) {
+
+            # arrange the RRA indexes from most granular to less granular
+            my @rraidx_ascending_steps;
+            foreach my $steps (sort {$a <=> $b} keys %rraidx_per_steps) {
+                push( @rraidx_ascending_steps, $rraidx_per_steps{$steps} );
+            }
+
+            for( my $row=0; $row < $rra_len; $row++ ) {
+
+                # negative integers in (pdp_step)*seconds
+                my $row_start_time = ($row - $rra_len) * $pdp_per_row;
+                my $row_end_time = $row_start_time + $pdp_per_row;
+
+                foreach my $rra ( @rraidx_ascending_steps ) {
+                    my $src_steps = $self->{'rra'}[$rra]->{'pdp_per_row'};
+                    my $src_data = $self->{'cdp_data'}[$rra];
+                    my $src_len = scalar(@{$src_data});
+
+                    if( $row_start_time < (-1) * $src_len * $src_steps ) {
+                        # our new row is outside of the array boundaries
+                        next;
+                    }
+
+                    my $n_src_rows = int($pdp_per_row/$src_steps);
+                    if( $n_src_rows == 0 ) {
+                        # the source row is less granular than ours --
+                        # then we take just one value
+                        $n_src_rows = 1;
+                    }
+
+                    # grab the values from source rows
+                    my @known_values;
+                    my @unknown_values;
+                    my $start_src_row = int($src_len +
+                                            $row_start_time/$src_steps);
+                    for( my $ds=0; $ds < $n_ds; $ds++ ) {
+
+                        my $known_val_per_ds = [];
+                        my $unknown_val_per_ds = 0;
+
+                        for( my $src_row_pos = 0; $src_row_pos < $n_src_rows;
+                             $src_row_pos++ ) {
+                            my $src_row = $start_src_row + $src_row_pos;
+                            my $data_element = $src_data->[$src_row][$ds];
+                            if( $data_element eq 'nan' ) {
+                                $unknown_val_per_ds++;
+                            }
+                            else {
+                                push(@{$known_val_per_ds}, $data_element);
+                            }
+                        }
+
+                        push( @known_values, $known_val_per_ds );
+                        push( @unknown_values, $unknown_val_per_ds );
+                    }
+
+                    # if the number of knowns is good enough, take the value
+                    for( my $ds=0; $ds < $n_ds; $ds++ ) {
+                        if( $unknown_values[$ds] * 1.0 / $n_src_rows <
+                            $arg->{xff} ) {
+
+                            # now calculate the new value from knowns
+
+                            if( $cf eq 'AVERAGE' ) {
+                                my $val = 0;
+                                map {$val += $_} @{$known_values[$ds]};
+                                $rra_data->[$row][$ds] =
+                                    $val / scalar(@{$known_values[$ds]});
+                            }
+                            elsif( $cf eq 'MIN' ) {
+                                my $val = '+inf';
+                                map {if($_ < $val){$val = $_} }
+                                    @{$known_values[$ds]};
+                                $rra_data->[$row][$ds] = $val;
+                            }
+                            elsif( $cf eq 'MAX' ) {
+                                my $val = '-inf';
+                                map {if($_ > $val){$val = $_} }
+                                    @{$known_values[$ds]};
+                                $rra_data->[$row][$ds] = $val;
+                            }
+                            elsif( $cf eq 'LAST' ) {
+                                my $val = pop @{$known_values[$ds]};
+                                $rra_data->[$row][$ds] = $val;
+                            }
+                        }
+                    }
+
+                    # we've done all we could, so finish trying other RRA's
+                    last;
+                }
+            }
+        }
+    }
+
     return;
 }
 
