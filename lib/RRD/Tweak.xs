@@ -26,6 +26,18 @@
 #define RRD_VERSION4   "0004"
 #endif
 
+/* rrd_random() appears only in rrdtool-1.4, and we need backward
+   compatibility */
+static long tweak_rrd_random(void) {
+    static int rand_init = 0;
+    if (!rand_init) {
+        srandom((unsigned int) time(NULL) + (unsigned int) getpid());
+        rand_init++;
+    }
+    return random();
+}
+
+
 /* this is not yet implemented in RRDtool -- with the hopes for a
    better future */
 #if defined(RRD_TOOL_VERSION) && RRD_TOOL_VERSION > 10040999
@@ -643,7 +655,8 @@ _save_file(HV *self, char *filename)
               cur_rra_def->row_cnt = av_len(rra_cdp_data_array) + 1;
 
               /* Set the RRA pointer to a random location */
-              rrd->rra_ptr[i].cur_row = rrd_random() % cur_rra_def->row_cnt;
+              rrd->rra_ptr[i].cur_row =
+                  tweak_rrd_random() % cur_rra_def->row_cnt;
 
               /* RRA cf */
               fetch_result = hv_fetch(rra_params, "cf", 2, 0);
