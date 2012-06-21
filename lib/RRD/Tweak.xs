@@ -393,6 +393,7 @@ _load_file(HV *self, char *filename)
       hv_store(self, "cdp_data", 8, newRV((SV *) cdp_data), 0);
 
       rrd_free(&rrd);
+      rrd_close(rrd_file);
   }
 
 

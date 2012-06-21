@@ -965,6 +965,7 @@ sub modify_ds {
             }
         }
     }
+    return;
 }
 
 
@@ -1219,6 +1220,7 @@ sub del_rra {
     splice(@{$self->{'rra'}}, $del_rra_index, 1);
     splice(@{$self->{'cdp_prep'}}, $del_rra_index, 1);
     splice(@{$self->{'cdp_data'}}, $del_rra_index, 1);
+    return;
 }
 
 
@@ -1310,6 +1312,7 @@ sub modify_rra {
             unshift(@{$rra_data}, @{$prepend_rra_data});
         }
     }
+    return;
 }
 
 
