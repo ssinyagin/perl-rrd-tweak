@@ -166,11 +166,11 @@ _load_file(HV *self, char *filename)
                    newSVuv(rrd.pdp_prep[i].scratch[PDP_unkn_sec_cnt].u_cnt), 0);
 
           /* done with this DS -- store it into ds_list array */
-          av_push(ds_list, newRV((SV *) ds_params));
+          av_push(ds_list, newRV_noinc((SV *) ds_params));
       }
 
       /* done with datasources -- attach ds_list as $self->{ds} */
-      hv_store(self, "ds", 2, newRV((SV *) ds_list), 0);
+      hv_store(self, "ds", 2, newRV_noinc((SV *) ds_list), 0);
 
 
       /* process RRA's */
@@ -326,7 +326,7 @@ _load_file(HV *self, char *filename)
                   }
 
                   hv_store(ds_cdp_prep, "history", 7,
-                           newRV((SV *) history_array), 0);
+                           newRV_noinc((SV *) history_array), 0);
               }
 
               break;
@@ -347,15 +347,15 @@ _load_file(HV *self, char *filename)
               }
 
               /* done with this DS CDP. store it into rra_cdp_prep array */
-              av_push(rra_cdp_prep, newRV((SV *) ds_cdp_prep));
+              av_push(rra_cdp_prep, newRV_noinc((SV *) ds_cdp_prep));
           }
 
           /* done with all datasources. Store rra_cdp_prep into cdp_prep_list */
-          av_push(cdp_prep_list, newRV((SV *) rra_cdp_prep));
+          av_push(cdp_prep_list, newRV_noinc((SV *) rra_cdp_prep));
 
 
           /* done with RRA definition, attach it to rradef_list array */
-          av_push(rradef_list, newRV((SV *) rra_params));
+          av_push(rradef_list, newRV_noinc((SV *) rra_params));
 
           /* extract the RRA data */
           rrd_seek(rrd_file, (rra_start + (rrd.rra_ptr[i].cur_row + 1)
@@ -376,21 +376,21 @@ _load_file(HV *self, char *filename)
                   av_push(cdp_row, newSVnv(my_cdp));
               }
 
-              av_push(rra_cdp_rows, newRV((SV *) cdp_row));
+              av_push(rra_cdp_rows, newRV_noinc((SV *) cdp_row));
           }
 
           /* done with this RRA. Add it to cdp_data array */
-          av_push(cdp_data, newRV((SV *) rra_cdp_rows));
+          av_push(cdp_data, newRV_noinc((SV *) rra_cdp_rows));
       }
 
       /* done with RRA processing -- attach rradef_list as $self->{rra} */
-      hv_store(self, "rra", 3, newRV((SV *) rradef_list), 0);
+      hv_store(self, "rra", 3, newRV_noinc((SV *) rradef_list), 0);
 
       /* attach cdp_prep_list as $self->{cdp_prep} */
-      hv_store(self, "cdp_prep", 8, newRV((SV *) cdp_prep_list), 0);
+      hv_store(self, "cdp_prep", 8, newRV_noinc((SV *) cdp_prep_list), 0);
 
       /* attach cdp_data as $self->{cdp_data} */
-      hv_store(self, "cdp_data", 8, newRV((SV *) cdp_data), 0);
+      hv_store(self, "cdp_data", 8, newRV_noinc((SV *) cdp_data), 0);
 
       rrd_free(&rrd);
       rrd_close(rrd_file);
