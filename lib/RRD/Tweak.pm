@@ -28,8 +28,24 @@ RRD::Tweak - RRD file manipulation
 =head1 SYNOPSIS
 
     use RRD::Tweak;
-    my $foo = RRD::Tweak->new();
-    ...
+
+    my $rrd = RRD::Tweak->new();
+    $rrd->load_file($filename1);
+    my $rrd_info = $rrd->info();
+
+    $rrd->del_ds(5);
+    $rrd->add_ds({name => 'InErrors',
+                  type=> 'COUNTER',
+                  heartbeat => 755});
+    $rrd->modify_ds(2, {max => 1000});
+
+    $rrd->add_rra({cf => 'MAX',
+                   xff => 0.77,
+                   steps => 12,
+                   rows => 10000}) ;
+    $rrd->modify_rra(6, {rows => 3000});
+
+    $rrd->save_file($filename2);
 
 
 =head1 METHODS
