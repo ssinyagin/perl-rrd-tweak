@@ -431,6 +431,7 @@ sub _set_errmsg {
 
 
 =head2 load_file
+
  $rrd->load_file($filename);
 
 Reads the RRD file and stores its whole content in the RRD::Tweak object
