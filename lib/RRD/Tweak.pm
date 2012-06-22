@@ -48,6 +48,17 @@ RRD::Tweak - RRD file manipulation
     $rrd->save_file($filename2);
 
 
+This is a module for manipulating the structure of RRDtool files. It can
+read a file, alter its DS and RRA structure, and save a new file. It
+also allows creating new empty RRD files in memory or on the disk.
+
+The file read/write operations are implemented in native C. The module
+links with librrd, so the librrd library and its header files are
+required for building the RRD::Tweak module. The module is tested with
+RRDtool versions 1.3 and 1.4. As the RRD file format is architecture
+dependent, RRD::Tweak can only read files which are created by RRDtool
+in the same processor architecture.
+
 =head1 METHODS
 
 =head2 new
