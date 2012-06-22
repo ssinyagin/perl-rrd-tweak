@@ -11,7 +11,8 @@ RRDtool versions 1.3 and 1.4. As the RRD file format is architecture
 dependent, RRD::Tweak can only read files which are created by RRDtool
 in the same processor architecture.
 
-
+Git repository:
+https://github.com/ssinyagin/perl-rrd-tweak
 
 INSTALLATION
 
