@@ -2,6 +2,19 @@ use strict;
 use warnings;
 use Module::Build;
 
+
+# Module::Build does not validate linker and compiler flags, so we have
+# to prepare them in advance
+
+my $compiler_flags = `pkg-config librrd --cflags`;
+$compiler_flags =~ s/\s+$//m;
+$compiler_flags = length($compiler_flags) ? [$compiler_flags]:undef;
+
+my $linker_flags = `pkg-config librrd --libs`;
+$linker_flags =~ s/\s+$//m;
+$linker_flags = length($linker_flags) ? [$linker_flags]:undef;
+
+
 my $builder = Module::Build->new(
     module_name         => 'RRD::Tweak',
     license             => 'gpl',
@@ -17,8 +30,8 @@ my $builder = Module::Build->new(
     requires => {
         perl => '5.8.8',
     },
-    extra_linker_flags   => ['-lrrd'],
-    extra_compiler_flags => ['-O0', '-g'],
+    extra_compiler_flags => $compiler_flags,
+    extra_linker_flags   => $linker_flags,
     add_to_cleanup      => [ 'RRD-Tweak-*' ],
     create_makefile_pl => 'traditional',
 );
