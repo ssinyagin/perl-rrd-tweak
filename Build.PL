@@ -8,11 +8,19 @@ use Module::Build;
 
 my $compiler_flags = `pkg-config librrd --cflags`;
 $compiler_flags =~ s/\s+$//m;
-$compiler_flags = length($compiler_flags) ? [$compiler_flags]:undef;
+if( defined($ENV{RRDTWEAK_CFLAGS}) ) {
+    $compiler_flags .= ' ' . $ENV{RRDTWEAK_CFLAGS};
+}
+$compiler_flags = length($compiler_flags) ?
+    [split(/\s+/,$compiler_flags)]:undef;
 
 my $linker_flags = `pkg-config librrd --libs`;
 $linker_flags =~ s/\s+$//m;
-$linker_flags = length($linker_flags) ? [$linker_flags]:undef;
+if( defined($ENV{RRDTWEAK_LDFLAGS}) ) {
+    $linker_flags .= ' ' . $ENV{RRDTWEAK_LDFLAGS};
+}
+$linker_flags = length($linker_flags) ?
+    [split(/\s+/,$linker_flags)]:undef;
 
 
 my $builder = Module::Build->new(
