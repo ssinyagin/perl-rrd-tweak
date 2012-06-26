@@ -1,5 +1,8 @@
 Revision history for RRD-Tweak
 
+0.02    2012-06-26
+        Documentation update
+        Build.PL uses pkg-config
+
 0.01    2012-06-22
         First release
-
