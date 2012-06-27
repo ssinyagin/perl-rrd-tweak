@@ -1,5 +1,8 @@
 Revision history for RRD-Tweak
 
+0.04    2012-06-27
+        f6c47d6 Bugfix: modify_rra incorrectly reduced RRA size
+
 0.03    2012-06-26
         Documentation update
         Build.PL uses pkg-config
