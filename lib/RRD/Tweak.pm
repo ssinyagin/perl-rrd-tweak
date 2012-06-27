@@ -1319,7 +1319,7 @@ sub modify_rra {
         if( $arg->{'rows'} < $rra_len ) {
 
             # shrink the RRA: remove the array head
-            splice(@{$rra_data}, 0, ($arg->{'rows'} - $rra_len));
+            splice(@{$rra_data}, 0, ($rra_len - $arg->{'rows'}));
         }
         elsif( $arg->{'rows'} > $rra_len ) {
 
