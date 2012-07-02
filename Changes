@@ -1,5 +1,8 @@
 Revision history for RRD-Tweak
 
+0.05    2012-07-02
+        afa5bc0 added rra_descr(), ds_descr(); prohibited del_rra() for HW files
+        
 0.04    2012-06-27
         f6c47d6 Bugfix: modify_rra incorrectly reduced RRA size
 
