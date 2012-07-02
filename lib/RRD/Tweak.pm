@@ -154,6 +154,15 @@ my %cdp_prep_attributes =
      'FAILURES'     => ['history'],
     );
 
+# CF names with special treatment
+my %hw_rra_name =
+    ('HWPREDICT'    => 1,
+     'MHWPREDICT'   => 1,
+     'DEVPREDICT'   => 1,
+     'SEASONAL'     => 1,
+     'DEVSEASONAL'  => 1,
+     'FAILURES'     => 1,
+     );
 
 
 sub validate {
@@ -1245,6 +1254,13 @@ sub del_rra {
               $del_rra_index);
     }
 
+    for( my $rra=0; $rra < $n_rra; $rra++) {
+        if( $hw_rra_name{$self->{'rra'}[$rra]{cf}} ) {
+            croak('del_rra() is not currently supported for RRD files ' .
+                  'containing Holt-Winters RRA')
+        }
+    }
+
     splice(@{$self->{'rra'}}, $del_rra_index, 1);
     splice(@{$self->{'cdp_prep'}}, $del_rra_index, 1);
     splice(@{$self->{'cdp_data'}}, $del_rra_index, 1);
@@ -1416,6 +1432,93 @@ sub info {
 
     return $ret;
 }
+
+
+
+
+=head2 ds_descr
+
+ $rrd->ds_descr($ds_index);
+
+The method returns the DS description string as described in
+I<rrdcreate> manual page (e.g. "DS:InOctets:COUNTER:700:0:U").
+
+=cut
+
+sub ds_descr {
+    my $self = shift;
+    my $ds_index = shift;
+
+    my $n_ds = scalar(@{$self->{'ds'}});
+
+    if( $ds_index < 0 or $ds_index >= $n_ds ) {
+        croak('ds_descr(): DS index is outside of allowed range: ' . $ds_index);
+    }
+
+    my $ds_attr = $self->{'ds'}[$ds_index];
+
+    my $ret = 'DS:' . $ds_attr->{'name'} . ':' . $ds_attr->{'type'};
+
+    if( $ds_attr->{'type'} ne 'COMPUTE' ) {
+        $ret .= ':' . $ds_attr->{'hb'};
+        
+        foreach my $key ('min', 'max') {
+            if( $ds_attr->{$key} !~ /^-?nan$/i ) {
+                $ret .= ':' . $ds_attr->{$key};
+            }
+            else {
+                $ret .= ':U';
+            }
+        }
+    }
+    else {
+        croak('ds_descr(): DS type COMPUTE is currently unsupported');
+    }
+
+    return $ret;
+}
+
+
+
+
+
+=head2 rra_descr
+
+ $rrd->rra_descr($rra_index);
+
+The method returns a string description of a round-robin array, as specified in
+I<rrdcreate> manual page (e.g. "RRA:AVERAGE:0.25:12:365").
+
+The returned string for Holt-Winters prediction RRA delivers only
+partial information.
+
+=cut
+
+sub rra_descr {
+    my $self = shift;
+    my $rra_index = shift;
+
+    my $n_rra = scalar(@{$self->{'rra'}});
+
+    if( $rra_index < 0 or $rra_index >= $n_rra ) {
+        croak('rra_descr(): RRA index is outside of allowed range: ' .
+              $rra_index);
+    }
+
+    my $r = $self->{'rra'}[$rra_index];
+    my $cf = $r->{cf};
+    my $rra_len = scalar(@{$self->{'cdp_data'}[$rra_index]});
+    my $steps = $r->{'pdp_per_row'};
+
+    my $ret = 'RRA:' . $cf;
+
+    if( not $hw_rra_name{$cf} ) {
+        $ret .= ':' . $r->{'xff'} . ':' . $steps . ':' . $rra_len;
+    }
+
+    return $ret;
+}
+
 
 
 

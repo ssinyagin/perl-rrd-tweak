@@ -1,6 +1,6 @@
 #!perl -T
 
-use Test::More tests => 18;
+use Test::More tests => 20;
 
 use File::Temp qw/tmpnam/;
 use RRDs;
@@ -110,7 +110,16 @@ check_expr('scalar(@{$rrd->{cdp_data}[0][0]})', '$n_ds');
 # print Dumper($rrd->{ds});
 # print Dumper($rrd->{rra});
 
+my $descr = $rrd->ds_descr(1);
+ok(($descr eq 'DS:x2:GAUGE:600:0.0001:U'), 'ds_descr(1)') or
+  diag('ds_descr(1): ' . $descr);
 
+
+$descr = $rrd->rra_descr(6);
+ok(($descr eq 'RRA:MIN:0.5:12:2400'), 'rra_descr(6)') or
+    diag('rra_descr(6): ' . $descr);
+
+    
 diag("Saving $filename2");
 $rrd->save_file($filename2);
 diag("Saved $filename2");
