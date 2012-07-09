@@ -16,6 +16,10 @@ https://github.com/ssinyagin/perl-rrd-tweak
 
 INSTALLATION
 
+Before installing the module, you need RRDtool header files, such as
+"rrd.h". In RHEL/CentOS, they are available in "rrdtool-devel" package,
+and in Debian/Ubuntu they come with "librrd-dev" package.
+
 To install this module, run the following commands:
 
 	perl Build.PL
