@@ -41,7 +41,7 @@ my $builder = Module::Build->new(
     extra_compiler_flags => $compiler_flags,
     extra_linker_flags   => $linker_flags,
     add_to_cleanup      => [ 'RRD-Tweak-*' ],
-    create_makefile_pl => 'passthrough',
+    create_makefile_pl => 'small',
 );
 
 $builder->create_build_script();
