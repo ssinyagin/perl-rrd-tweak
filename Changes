@@ -1,5 +1,9 @@
 Revision history for RRD-Tweak
 
+0.06    2012-07-09
+        263b4a7 README updated
+        e66f1cb Build.PL: create_makefile_pl => passthrough
+
 0.05    2012-07-02
         afa5bc0 added rra_descr(), ds_descr(); prohibited del_rra() for HW files
         
