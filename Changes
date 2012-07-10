@@ -1,5 +1,9 @@
 Revision history for RRD-Tweak
 
+0.08    2012-07-10
+        5b2cc36 added debugging information
+        6030cd4 Replaced random() with rand() because of issues in RHEL4
+
 0.07    2012-07-09
         2a3907d Build.PL: create_makefile_pl => small
         263b4a7 README updated
