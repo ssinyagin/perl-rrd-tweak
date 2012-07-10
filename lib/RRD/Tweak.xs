@@ -31,10 +31,10 @@
 static long tweak_rrd_random(void) {
     static int rand_init = 0;
     if (!rand_init) {
-        srandom((unsigned int) time(NULL) + (unsigned int) getpid());
+        srand((unsigned int) time(NULL) + (unsigned int) getpid());
         rand_init++;
     }
-    return random();
+    return rand();
 }
 
 
