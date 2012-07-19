@@ -1438,6 +1438,29 @@ sub info {
 
 
 
+=head2 has_hwpredict
+
+ my $hw_status = $rrd->has_hwpredict();
+
+The method returns true if any of Holt-Winters RRA exist in the RRD file.
+
+=cut
+
+sub has_hwpredict {
+    my $self = shift;
+    my $ds_index = shift;
+
+    my $n_rra = scalar(@{$self->{'rra'}});
+    for( my $rra=0; $rra < $n_rra; $rra++) {
+        if( $hw_rra_name{$self->{'rra'}[$rra]{'cf'}} ) {
+            return 1;
+        }
+    }
+    return 0;
+}
+    
+
+
 
 =head2 ds_descr
 
@@ -1455,7 +1478,8 @@ sub ds_descr {
     my $n_ds = scalar(@{$self->{'ds'}});
 
     if( $ds_index < 0 or $ds_index >= $n_ds ) {
-        croak('ds_descr(): DS index is outside of allowed range: ' . $ds_index);
+        croak('ds_descr(): DS index is outside of allowed range: ' .
+              $ds_index);
     }
 
     my $ds_attr = $self->{'ds'}[$ds_index];
