@@ -1,5 +1,11 @@
 Revision history for RRD-Tweak
 
+0.09    2012-07-19
+        76a0045 New method: has_hwpredict()
+        8c2375c strict and warnings in test files
+        682438e del_rra() now handles Holt-Winters arrays
+        a36d932 deleted t/05-boilerplate.t
+
 0.08    2012-07-10
         5b2cc36 added debugging information
         6030cd4 Replaced random() with rand() because of issues in RHEL4
