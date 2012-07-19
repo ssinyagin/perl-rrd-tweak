@@ -1,5 +1,8 @@
 #!perl -T
 
+use strict;
+use warnings;
+
 use Test::More tests => 11;
 
 use File::Temp qw/tmpnam/;
@@ -64,7 +67,7 @@ diag("Created $filename1");
 
 my $rrd1 = RRD::Tweak->new();
 $rrd1->load_file($filename1);
-ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
+ok($rrd1->validate(), "validate()") or diag($rrd1->errmsg());
 
 $rrd1->modify_rra(6, {rows => 3000});
 
@@ -73,7 +76,7 @@ diag("Saved $filename2");
 
 $rrd1->clean();
 $rrd1->load_file($filename1);
-ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
+ok($rrd1->validate(), "validate()") or diag($rrd1->errmsg());
 
 my $rrd2 = RRD::Tweak->new();
 $rrd2->load_file($filename2);

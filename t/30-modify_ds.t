@@ -1,5 +1,8 @@
 #!perl -T
 
+use strict;
+use warnings;
+
 use Test::More tests => 12;
 
 use File::Temp qw/tmpnam/;
@@ -50,10 +53,10 @@ eval { $rrd1->modify_ds(1, {name => 'InOctets'}) };
 ok($@, "modify_ds with duplicate name") or
     BAIL_OUT('modified a DS with duplicate name, but did not get an error');
 
-ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
+ok($rrd1->validate(), "validate()") or diag($rrd1->errmsg());
 
 $rrd1->modify_ds(1, {name => 'XXX'});
-ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
+ok($rrd1->validate(), "validate()") or diag($rrd1->errmsg());
 my $rrd1_info = $rrd1->info();
 ok(($rrd1_info->{ds}[1]{name} eq 'XXX'), "modify_ds changing name");
 
@@ -62,16 +65,16 @@ eval { $rrd1->modify_ds(1, {type => 'GAG'}) };
 ok($@, "modify_ds with invalid type") or
     BAIL_OUT('modified a DS with invalid type, but did not get an error');
 
-ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
+ok($rrd1->validate(), "validate()") or diag($rrd1->errmsg());
 
 $rrd1->modify_ds(1, {type => 'GAUGE'});
-ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
+ok($rrd1->validate(), "validate()") or diag($rrd1->errmsg());
 $rrd1_info = $rrd1->info();
 ok(($rrd1_info->{ds}[1]{type} eq 'GAUGE'), "modify_ds changing type");
 
 
 $rrd1->modify_ds(2, {max => 1000});
-ok($rrd1->validate(), "validate()") or diag($rrd2->errmsg());
+ok($rrd1->validate(), "validate()") or diag($rrd1->errmsg());
 $rrd1_info = $rrd1->info();
 ok(($rrd1_info->{ds}[2]{max} == 1000), "modify_ds changing max");
 

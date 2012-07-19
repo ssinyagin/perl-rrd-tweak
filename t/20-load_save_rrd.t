@@ -1,5 +1,8 @@
 #!perl -T
 
+use strict;
+use warnings;
+
 use Test::More tests => 20;
 
 use File::Temp qw/tmpnam/;
