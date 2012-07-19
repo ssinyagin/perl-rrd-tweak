@@ -1254,10 +1254,13 @@ sub del_rra {
               $del_rra_index);
     }
 
-    for( my $rra=0; $rra < $n_rra; $rra++) {
+    # Holt-Winters RRA refer to other array indices, so we adjust the
+    # references which are affected by this deletion
+    for( my $rra = $del_rra_index+1; $rra < $n_rra; $rra++) {
         if( $hw_rra_name{$self->{'rra'}[$rra]{cf}} ) {
-            croak('del_rra() is not currently supported for RRD files ' .
-                  'containing Holt-Winters RRA')
+            if( $self->{'rra'}[$rra]{'dependent_rra_idx'} >= $del_rra_index ) {
+                $self->{'rra'}[$rra]{'dependent_rra_idx'}--;
+            }
         }
     }
 
@@ -1461,7 +1464,7 @@ sub ds_descr {
 
     if( $ds_attr->{'type'} ne 'COMPUTE' ) {
         $ret .= ':' . $ds_attr->{'hb'};
-        
+
         foreach my $key ('min', 'max') {
             if( $ds_attr->{$key} !~ /^-?nan$/i ) {
                 $ret .= ':' . $ds_attr->{$key};
