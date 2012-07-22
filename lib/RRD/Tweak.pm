@@ -7,7 +7,7 @@ use Carp;
 
 use base 'DynaLoader';
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 bootstrap RRD::Tweak;
 
 # Internal object structure:
