@@ -1498,15 +1498,14 @@ sub _populate_rra
     for ( my $row=0; $row < $rra_len; $row++ ) {
 
         # check if we have any NANs in this row
-        my $nan_found = 0;
+        my @nan_ds;
         for ( my $ds=0; $ds < $n_ds; $ds++ ) {
             if( $rra_data->[$row][$ds] =~ /nan/io ) {
-                $nan_found = 1;
-                last;
+                push(@nan_ds, $ds);
             }
         }
 
-        if( not $nan_found ) {
+        if( not scalar(@nan_ds) ) {
             # this row has all values already defined, skip it from population
             next;
         }
@@ -1538,8 +1537,7 @@ sub _populate_rra
             my @unknown_values = ();
             my $start_src_row = int($src_len +
                                     $row_start_time/$src_steps);
-            for ( my $ds=0; $ds < $n_ds; $ds++ ) {
-
+            foreach my $ds (@nan_ds) {
                 my $known_val_per_ds = [];
                 my $unknown_val_per_ds = 0;
 
@@ -1554,16 +1552,15 @@ sub _populate_rra
                     }
                 }
 
-                push( @known_values, $known_val_per_ds );
-                push( @unknown_values, $unknown_val_per_ds );
+                $known_values[$ds] = $known_val_per_ds;
+                $unknown_values[$ds] = $unknown_val_per_ds;
             }
 
             # if the number of knowns is good enough, take the value
-            for ( my $ds=0; $ds < $n_ds; $ds++ ) {
+            foreach my $ds (@nan_ds) {
                 if ( $unknown_values[$ds] * 1.0 / $n_src_rows <= $xff ) {
 
                     # now calculate the new value from knowns
-
                     if ( $cf eq 'AVERAGE' ) {
                         my $val = 0;
                         map {$val += $_} @{$known_values[$ds]};
