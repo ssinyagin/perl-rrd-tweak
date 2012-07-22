@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 10;
+use Test::More tests => 12;
 
 use File::Temp qw/tmpnam/;
 use RRDs;
@@ -100,7 +100,10 @@ ok($rrd2->validate(), "validate()") or diag($rrd2->errmsg());
 #diag(Dumper($rrd2->{cdp_data}[10]));
 
 ok($rrd2->{cdp_data}[9][1][0] == 480);
-ok($rrd2->{cdp_data}[10][3][0] == 300);
+ok($rrd2->{cdp_data}[10][1][0] == 300);
+
+ok($rrd2->{cdp_data}[9][2][0] == 600);
+ok($rrd2->{cdp_data}[10][2][0] == 600);
 
 ok((unlink $filename1), "unlink $filename1");
 ok((unlink $filename2), "unlink $filename2");
