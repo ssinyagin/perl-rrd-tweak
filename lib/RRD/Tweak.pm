@@ -1252,7 +1252,7 @@ sub modify_rra {
             }
 
             unshift(@{$rra_data}, @{$prepend_rra_data});
-            
+
             # try to derive the data rows where possible
             $self->_populate_rra($mod_rra_index);
         }
@@ -1475,7 +1475,7 @@ sub _populate_rra
         # this is a Holt-Winters array, and we don't know how to populate it
         return;
     }
-    
+
     my %rraidx_per_steps;
     for( my $rra=0; $rra < $n_rra; $rra++) {
         if( $rra != $pop_rra_index ) {
@@ -1605,6 +1605,8 @@ Stanislav Sinyagin, C<< <ssinyagin at k-open.com> >>
 
 =head1 ACKNOWLEDGEMENTS
 
+This development has been sponsored by Nexellent AG and UPC Cablecom AG,
+Switzerland.
 
 =head1 LICENSE AND COPYRIGHT
 
