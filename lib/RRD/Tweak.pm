@@ -1471,6 +1471,11 @@ sub _populate_rra
         return;
     }
 
+    if( $hw_rra_name{$cf} ) {
+        # this is a Holt-Winters array, and we don't know how to populate it
+        return;
+    }
+    
     my %rraidx_per_steps;
     for( my $rra=0; $rra < $n_rra; $rra++) {
         if( $rra != $pop_rra_index ) {
