@@ -1,5 +1,9 @@
 Revision history for RRD-Tweak
 
+0.11    2012-07-23
+27b27b3 added sponsors in Acknowledgements
+88a10ac _populate_rra(): do not populate Holt-Winters arrays
+
 0.10    2012-07-22
 b11aebc _populate_rra(): populate only NaN rows
 fa4e30e when an RRA grows, try to derive the data from other RRAs
